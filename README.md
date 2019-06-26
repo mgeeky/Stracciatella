@@ -216,7 +216,7 @@ Currently, the way the Stracciatella provides runspace for powershell commands i
 - Add Constrained Language Mode bypass
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
 - Disable Script Block logging first, than go after AMSI
-- ~Add memory scrambling routines, preventing easy process memory dumping and recovery of provided scripts/commands~
+- ~Clean essential variables ASAP, preventing easy process memory dumping and recovery of provided scripts/commands~
 
 
 ## Credits
