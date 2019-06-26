@@ -81,20 +81,25 @@ namespace Stracciatella
             }
 
             int i = 0;
+            HashSet<string> processed = new HashSet<string>();
+
             for(; i < args.Length; i++)
             {
                 string arg = args[i];
                 if(string.Equals(arg, "-v") || string.Equals(arg, "--verbose"))
                 {
                     options.Verbose = true;
+                    processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-b") || string.Equals(arg, "--base64"))
                 {
                     options.Base64 = true;
+                    processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-f") || string.Equals(arg, "--force"))
                 {
                     options.Force = true;
+                    processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-c") || string.Equals(arg, "--command"))
                 {
@@ -104,6 +109,8 @@ namespace Stracciatella
                     }
 
                     options.Command = args[i+1];
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
                     i += 1;
                 }
                 else if (string.Equals(arg, "-x") || string.Equals(arg, "--xor"))
@@ -119,17 +126,23 @@ namespace Stracciatella
                         n = $"0x{n}";
                     }
                     options.XorKey = Byte.Parse(n.Substring(2), NumberStyles.HexNumber);
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
                     i += 1;
                 }
-                else if (!((i == args.Length - 1) && (File.Exists(arg))))
+                else if ((i < args.Length - 1) && !options.ValidOptions.Contains(arg))
                 {
                     throw new ArgumentException($"Unknown parameter '{arg}'.");
                 }
             }
 
-            if ((i < args.Length) && !(options.ValidOptions.Contains(args[i])))
+            if ((i - 1 < args.Length) && (File.Exists(args[i - 1])))
             {
-                options.ScriptPath = args[i];
+                options.ScriptPath = args[i - 1];
+            }
+            else if ((i - 1 < args.Length) && !processed.Contains(args[i - 1]))
+            {
+                options.ScriptPath = args[i - 1];
             }
             else if (options.Command.Length == 0)
             {
@@ -197,7 +210,7 @@ namespace Stracciatella
                 Info("[-] Script Block Logging not disabled.");
             }
 
-            string l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host);
+            string l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
             Info($"[.] Language Mode: {l}");
 
             return ret;
@@ -438,10 +451,17 @@ namespace Stracciatella
 
                         Info($"PS> & '{scriptPath}'");
                         output += ExecuteCommand(scriptContents, ps, host);
+
+                        scriptContents = "";
+                        scriptPath = "";
+                        ProgramOptions.ScriptPath = "";
                     }
 
                     Info($"PS> {command}");
                     output += ExecuteCommand(command, ps, host);
+                    command = "";
+
+                    System.GC.Collect();
                 }
 
                 runspace.Close();
@@ -450,13 +470,31 @@ namespace Stracciatella
             return output.Trim();
         }
 
-        private static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host)
+        private static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host, bool silent = false)
         {
             string output = "";
             if (command != null && command.Length > 0)
             {
                 using (Pipeline pipe = rs.Runspace.CreatePipeline())
                 {
+                    try
+                    {
+                        if (ProgramOptions.Base64)
+                        {
+                            command = Decoder.Base64Decode(command);
+                        }
+
+                        if (ProgramOptions.XorKey != 0)
+                        {
+                            command = Decoder.XorDecode(command, ProgramOptions.XorKey);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        if(!silent)
+                            Info($"[-] Could not decode command: {e.Message.ToString()}");
+                    }
+
                     pipe.Commands.AddScript(command);
                     pipe.Commands[0].MergeMyResults(PipelineResultTypes.Error, PipelineResultTypes.Output);
                     pipe.Commands.Add("Out-default");
@@ -464,6 +502,9 @@ namespace Stracciatella
                     try
                     {
                         pipe.Invoke();
+
+                        command = "";
+
                         output = ((CustomPSHostUserInterface)host.UI).Output;
                         ((CustomPSHostUserInterface)host.UI)._sb = new StringBuilder();
                     }
@@ -523,6 +564,7 @@ namespace Stracciatella
                         input = Input(prompt);
 
                         string output = ExecuteCommand(input, ps, host);
+                        input = "";
                         Console.WriteLine(output);
 
                         if (input == null || input.Length == 0
@@ -544,20 +586,10 @@ namespace Stracciatella
             try
             {
                 buf = File.ReadAllText(scriptPath);
-
-                if (ProgramOptions.Base64)
-                {
-                    buf = Decoder.Base64Decode(buf);
-                }
-
-                if (ProgramOptions.XorKey != 0)
-                {
-                    buf = Decoder.XorDecode(buf, ProgramOptions.XorKey);
-                }
             }
             catch (Exception e)
             {
-                Info($"[-] {e.Message}");
+                Info($"[-] Could not open file: {e.Message}");
             }
             return buf;
         }
@@ -576,16 +608,6 @@ namespace Stracciatella
             try
             {
                 ProgramOptions = ParseOptions(args);
-
-                if(ProgramOptions.Base64)
-                {
-                    ProgramOptions.Command = Decoder.Base64Decode(ProgramOptions.Command);
-                }
-
-                if(ProgramOptions.XorKey != 0)
-                {
-                    ProgramOptions.Command = Decoder.XorDecode(ProgramOptions.Command, ProgramOptions.XorKey);
-                }
             }
             catch(ArgumentException e)
             {
@@ -597,6 +619,15 @@ namespace Stracciatella
             if (ProgramOptions.Verbose)
             {
                 PrintBanner();
+            }
+
+            if (ProgramOptions.ScriptPath.Length > 0)
+            {
+                Info($"[.] Will load script file: '{ProgramOptions.ScriptPath}'");
+            }
+            else
+            {
+                Info($"[-] It looks like no script path was given.");
             }
 
             if (ProgramOptions.Parashell)

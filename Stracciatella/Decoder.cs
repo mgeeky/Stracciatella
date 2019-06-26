@@ -24,8 +24,7 @@ namespace Stracciatella
 
             for (int i = 0; i < input.Length; i++)
             {
-                ch = insb[i];
-                ch = (char)(ch ^ key);
+                ch = (char)(insb[i] ^ key);
                 outsb.Append(ch);
             }
             return outsb.ToString();
