@@ -564,7 +564,6 @@ namespace Stracciatella
                         input = Input(prompt);
 
                         string output = ExecuteCommand(input, ps, host);
-                        input = "";
                         Console.WriteLine(output);
 
                         if (input == null || input.Length == 0
@@ -573,6 +572,8 @@ namespace Stracciatella
                         {
                             break;
                         }
+
+                        input = "";
                     }
                 }
 
