@@ -185,7 +185,7 @@ PS D:\> .\Stracciatella.exe -v
 
 Stracciatella D:\> . .\Invoke-Mimikatz.ps1
 
-Stracciatella D:\> Invoke-Mimikatz -Command "coffee ; exit"
+Stracciatella D:\> Invoke-Mimikatz -Command "coffee exit"
 
   .#####.   mimikatz 2.1 (x64) built on Nov 10 2016 15:31:14
  .## ^ ##.  "A La Vie, A L'Amour"
@@ -202,24 +202,6 @@ mimikatz(powershell) # coffee
   |      |]
   \      /
    `----'
-
-mimikatz(powershell) # ;
-ERROR mimikatz_doLocal ; ";" command of "standard" module not found !
-
-Module :        standard
-Full name :     Standard module
-Description :   Basic commands (does not require module name)
-
-            exit  -  Quit mimikatz
-             cls  -  Clear screen (doesn't work with redirections, like PsExec)
-          answer  -  Answer to the Ultimate Question of Life, the Universe, and Everything
-          coffee  -  Please, make me a coffee!
-           sleep  -  Sleep an amount of milliseconds
-             log  -  Log mimikatz input/output to file
-          base64  -  Switch file output/base64 output
-         version  -  Display some version informations
-              cd  -  Change or display current directory
-       localtime  -  Displays system local date and time (OJ command)
 
 mimikatz(powershell) # exit
 Bye!
