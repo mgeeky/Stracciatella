@@ -233,8 +233,8 @@ Currently, the way the Stracciatella provides runspace for powershell commands i
 - Implement rolling XOR with 2,3 and 4 bytes long key.
 - Add Constrained Language Mode bypass
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
-
-~- Add memory scrambling routines, preventing easy process memory dumping and recovery of provided scripts/commands~
+- Disable Script Block logging first, than go after AMSI
+- ~ Add memory scrambling routines, preventing easy process memory dumping and recovery of provided scripts/commands~
 
 
 ## Credits
