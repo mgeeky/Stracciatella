@@ -192,9 +192,35 @@ namespace Stracciatella
         {
             bool ret = true;
 
+            string l = ExecuteCommand("'{0}.{1}' -f $PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor", rs, host, true).Trim();
+            float psversion = 5;
+            try
+            {
+                System.Globalization.CultureInfo customCulture = (System.Globalization.CultureInfo)System.Threading.Thread.CurrentThread.CurrentCulture.Clone();
+                customCulture.NumberFormat.NumberDecimalSeparator = ".";
+
+                System.Threading.Thread.CurrentThread.CurrentCulture = customCulture;
+                psversion = float.Parse(l, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (FormatException e)
+            {
+                Info("[-] Could not obtain Powershell's version. Assuming 5.0");
+            }
+
+            if (psversion < 5.0 && !ProgramOptions.Force)
+            {
+                Info("[+] Powershell version is below 5, so AMSI, CLM, SBL are not available anyway :-)");
+                Info("Skipping bypass procedures...");
+                return ret;
+            }
+            else
+            {
+                Info($"[.] Powershell's version: {psversion}");
+            }
+
             ret &= DisableClm.DoDisable(rs);
 
-            string l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
+            l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
             Info($"[.] Language Mode: {l}");
 
             if(ret && String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
@@ -223,6 +249,8 @@ namespace Stracciatella
             {
                 Info("[-] AMSI not disabled.");
             }
+
+            Info("");
 
             return ret;
         }
@@ -564,6 +592,7 @@ namespace Stracciatella
                         if (!ProgramOptions.Force)
                         {
                             Info("[-] Bailing out...");
+                            return;
                         }
                     }
 
@@ -639,11 +668,20 @@ namespace Stracciatella
             }
             else
             {
-                Info($"[-] It looks like no script path was given.");
+                //Info($"[-] It looks like no script path was given.");
             }
 
             if (ProgramOptions.Parashell)
             {
+                Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
+                {
+                    if (e.SpecialKey == ConsoleSpecialKey.ControlC)
+                    {
+                        e.Cancel = true;
+                        Console.WriteLine("^C");
+                    }
+                };
+
                 Parashell();
             }
             else
