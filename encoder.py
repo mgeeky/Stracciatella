@@ -21,6 +21,10 @@ def parseOptions(argv):
 
     opts = parser.parse_args()
 
+    if len(argv) < 2:
+        parser.print_help()
+        sys.exit(1)
+
     try:
         if opts.xor:
             config['xorkey'] = int(opts.xor, 16)
@@ -72,7 +76,7 @@ def main(argv):
     if config['base64']:
         out = base64Encode(out)
 
-    print(out.decode())
+    sys.stdout.write(out.decode())
 
 if __name__ == '__main__':
     main(sys.argv)
