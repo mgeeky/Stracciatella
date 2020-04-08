@@ -22,13 +22,15 @@ namespace Stracciatella
                 "-f", "--force",
                 "-c", "--command",
                 "-x", "--xor",
-                "-e", "--cmdalsoencoded"
+                "-e", "--cmdalsoencoded",
+                "-n", "--nocleanup"
             };
 
             public bool Verbose { get; set; }
             public string Command { get; set; }
             public Byte XorKey { get; set; }
             public bool Force { get; set; }
+            public bool Nocleanup { get; set; }
             public string ScriptPath { get; set; }
             public bool Parashell { get; set; }
             public bool CmdEncoded { get; set; }
@@ -39,6 +41,7 @@ namespace Stracciatella
                 Force = false;
                 XorKey = 0;
                 Command = "";
+                Nocleanup = false;
                 ScriptPath = "";
                 Parashell = false;
                 CmdEncoded = false;
@@ -63,6 +66,8 @@ namespace Stracciatella
             Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter");
             Console.WriteLine("                               a pseudo-shell loop.");
             Console.WriteLine("  -v, --verbose              - Prints verbose informations");
+            Console.WriteLine("  -n, --nocleanup            - Don't remove CLM disable leftovers (DLL files in TEMP and COM registry keys).");
+            Console.WriteLine("                               By default these are going to be always removed. ");
             Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled.");
             Console.WriteLine("                               By default we bail out on failure.");
             Console.WriteLine("  -c, --command              - Executes the specified commands.");
@@ -103,6 +108,11 @@ namespace Stracciatella
                 else if (string.Equals(arg, "-f") || string.Equals(arg, "--force"))
                 {
                     options.Force = true;
+                    processed.Add(arg);
+                }
+                else if (string.Equals(arg, "-n") || string.Equals(arg, "--nocleanup"))
+                {
+                    options.Nocleanup = true;
                     processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-c") || string.Equals(arg, "--command"))
@@ -244,7 +254,7 @@ namespace Stracciatella
 
             if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
-                DisableClm.DoDisable(rs, ProgramOptions.Verbose);
+                DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
 
                 l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
                 Info($"[.] Language Mode after attempting to disable CLM: {l}");
@@ -538,6 +548,7 @@ namespace Stracciatella
                     output += ExecuteCommand(command, ps, host, !ProgramOptions.CmdEncoded);
                     command = "";
 
+                    if (!ProgramOptions.Nocleanup) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
                     System.GC.Collect();
                 }
 
@@ -547,7 +558,7 @@ namespace Stracciatella
             return output.Trim();
         }
 
-        private static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host, bool dontDecode = false, bool silent = false, bool addOutDefault = true)
+        public static string ExecuteCommand(string command, PowerShell rs, CustomPSHost host, bool dontDecode = false, bool silent = false, bool addOutDefault = true)
         {
             string output = "";
             if (command != null && command.Length > 0)
@@ -652,6 +663,8 @@ namespace Stracciatella
 
                         input = "";
                     }
+
+                    if(!ProgramOptions.Nocleanup) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
                 }
 
                 runspace.Close();

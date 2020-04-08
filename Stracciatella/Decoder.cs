@@ -21,6 +21,19 @@ namespace Stracciatella
             return System.Convert.FromBase64String(input);
         }
 
+        public static byte[] XorDecodeBinary(byte[] input, int key)
+        {
+            List<byte> outb = new List<byte>();
+            byte ch;
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                ch = (byte)(input[i] ^ key);
+                outb.Add(ch);
+            }
+            return outb.ToArray();
+        }
+
         public static string XorDecode(byte[] input, int key)
         {
             StringBuilder outsb = new StringBuilder(input.Length);
@@ -29,20 +42,6 @@ namespace Stracciatella
             for (int i = 0; i < input.Length; i++)
             {
                 ch = (char)(input[i] ^ key);
-                outsb.Append(ch);
-            }
-            return outsb.ToString();
-        }
-
-        public static string XorDecode(string input, int key)
-        {
-            StringBuilder insb = new StringBuilder(input);
-            StringBuilder outsb = new StringBuilder(input.Length);
-            char ch;
-
-            for (int i = 0; i < input.Length; i++)
-            {
-                ch = (char)(insb[i] ^ key);
                 outsb.Append(ch);
             }
             return outsb.ToString();

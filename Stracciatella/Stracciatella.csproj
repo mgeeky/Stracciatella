@@ -64,6 +64,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ClmEmbeddedFiles.cs" />
     <Compile Include="CustomPSHost.cs" />
     <Compile Include="Decoder.cs" />
     <Compile Include="DisableClm.cs" />
@@ -72,7 +73,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <None Include="packages.config" />
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
@@ -84,4 +87,7 @@
     <Error Condition="!Exists('packages\PropertyChanged.Fody.2.6.1\build\PropertyChanged.Fody.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\PropertyChanged.Fody.2.6.1\build\PropertyChanged.Fody.props'))" />
   </Target>
   <Import Project="packages\Fody.4.2.1\build\Fody.targets" Condition="Exists('packages\Fody.4.2.1\build\Fody.targets')" />
+  <PropertyGroup>
+    <PostBuildEvent>powershell.exe -File "$(SolutionDir)..\Out-CSharpDataClass.ps1" -SolutionDir "$(SolutionDir).." -Target1 "$(SolutionDir)..\ClmDisableAssembly\bin\Release\ClmDisableAssembly.dll"  -Target2 "$(SolutionDir)..\ClmDisableDll\ClmDisableDll.dll" -Verbose</PostBuildEvent>
+  </PropertyGroup>
 </Project>

