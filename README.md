@@ -31,7 +31,7 @@ This project inherits from above researches and great security community in orde
 
 ## OpSec
 
-* This program provides functionality to decode passed parameters on the fly, using Base64 and Xor single-byte decode (also combined)
+* This program provides functionality to decode passed parameters on the fly, using Xor single-byte decode
 * Before launching any command, it makes sure to disable AMSI using two approaches
 * Before launching any command, it makes sure to disable Script Block logging using two approaches
 * This program does not patch any system library, system native code (think amsi.dll)
@@ -47,21 +47,26 @@ There are couple of options available:
 PS D:\> Stracciatella.exe --help
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
+  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>
+  v0.2
 
-Usage: stracciatella.exe [options] [script]
-  script                - Path to file containing Powershell script to execute. If not options given, will enter a pseudo-shell loop.
-  -v, --verbose         - Prints verbose informations
-  -f, --force           - Proceed with execution even if Powershell defenses were not disabled. By default we bail out on failure.
-  -c, --command         - Executes the specified commands.
-                          If command and script parameters were given, executes command after running script.
-  -b, --base64          - Consider input as Base64 encoded. If both options, --base64 and --xor are specified,
-                          the program will peel them off accordingly: Base64Decode(XorDecode(data, XorKey))
-  -x <key>, --xor <key> - Consider input as XOR encoded, where <key> is a hex 8bit value being a key
+Usage: stracciatella.exe [options]
+  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter
+                               a pseudo-shell loop.
+  -v, --verbose              - Prints verbose informations
+  -f, --force                - Proceed with execution even if Powershell defenses were not disabled.
+                               By default we bail out on failure.
+  -c, --command              - Executes the specified commands.
+                               If command and script parameters were given, executes command after running script.
+  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal
+                               (prefix with 0x for hex)
+  -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.
+                               Decodes input command after decoding and running input script file.
+                               By default we only decode input file and consider command given in plaintext
 ```
 
 The program accepts command and script file path as it's input. Both are optional, if none were given - pseudo-shell will be started.
-Both command and script can be further encoded using single-byte XOR or Base64 (or combination of them) for better OpSec experience.
+Both command and script can be further encoded using single-byte XOR (will produce output Base64 encoded) for better OpSec experience.
 
 Here are couple of examples presenting use cases:
 
@@ -73,9 +78,11 @@ PS D:\> Stracciatella.exe -v
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
   Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
 
-[+] AMSI Disabled.
-[+] Script Block Logging Disabled.
+[.] Powershell's version: 5.1
 [.] Language Mode: FullLanguage
+[+] No need to disable Constrained Language Mode. Already in FullLanguage.
+[+] Script Block Logging Disabled.
+[+] AMSI Disabled.
 
 Stracciatella D:\> $PSVersionTable
 
@@ -91,7 +98,7 @@ PSRemotingProtocolVersion      2.3
 SerializationVersion           1.1.0.1
 ```
 
-2. *Base64 & XOR encoded (key = 0x31) command and path to script file*
+2. *XOR encoded (key = 0x31) command and path to script file*
 
 Firstly, in order to prepare encoded statements we can use bundled `encoder.py` script, that can be used as follows:
 
@@ -100,26 +107,22 @@ PS D:\> python encoder.py -h
 usage: encoder.py [options] <command|file>
 
 positional arguments:
-  command            Specifies either a command to encode or script file's
-                     path
+  command               Specifies either a command or script file's path for encoding
 
 optional arguments:
-  -h, --help         show this help message and exit
-  -b, --base64       Consider input as Base64 encoded. If both options,
-                     --base64 and --xor are specified, the program will apply
-                     them accordingly: Base64Encode(XorEncode(data, XorKey))
-  -x KEY, --xor KEY  Consider input as Base64 encoded. If both options,
-                     --base64 and --xor are specified, the program will apply
-                     them accordingly: Base64Encode(XorEncode(data, XorKey))
+  -h, --help            show this help message and exit
+  -x KEY, --xor KEY     Specifies command/file XOR encode key (one byte)
+  -o PATH, --output PATH
+                        (optional) Output file. If not given - will echo output to stdout
 
-PS D:\> python encoder.py -b -x 0x31 "Write-Host \"It works like a charm!\" ; $ExecutionContext.SessionState.LanguageMode"
+PS D:\> python encoder.py -x 0x31 "Write-Host \"It works like a charm!\" ; $ExecutionContext.SessionState.LanguageMode"
 ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU
 ```
 
 Then we feed `encoder.py` output as input being an encoded command for Stracciatella:
 
 ```
-PS D:\> Stracciatella.exe -v -b -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
+PS D:\> Stracciatella.exe -v -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
   Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
@@ -141,6 +144,22 @@ Whereas:
 
 - `Command` was built of following commands: `Base64Encode(XorEncode("Write-Host \"It works like a charm!\" ; $ExecutionContext.SessionState.LanguageMode", 0x31))`
 - `Test2.ps1` - contained: `"ZkNYRVQceV5CRRETahpsEWhUVFRIHRFYRRFDVFBdXUgRRl5DWlRVHxM="` `(Base64(XorEncode("Write-Host \"[+] Yeeey, it really worked.\"", 0x31)))`
+
+
+## Cobalt Strike support
+
+Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick`. The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
+
+```
+beacon> stracciatella whoami
+[*] Tasked beacon to run .NET program: stracciatella.exe -x 104 -e -c "HwAHCQUB"
+[+] host called home, sent: 135769 bytes
+[+] received output:
+workstation\mariusz
+
+```
+
+Finally, Stracciatella may be easily used by some other tools/C2s that don't offer any functionality to evade powershell protections.
 
 
 ## How do you disable AMSI & Script Block logging?
@@ -211,6 +230,7 @@ Bye!
 
 Currently, the way the Stracciatella provides runspace for powershell commands is not the most stealthiest out there. We basically create a Powershell runspace, which loads up corresponding .NET Assembly. This might be considered as a flag that stracciatella's process is somewhat shady. 
 
+- **Currently only supports .NET Framework 4.5+**
 - Create fully unmanaged powershell runspace
 - Implement rolling XOR with 2,3 and 4 bytes long key.
 - Add Constrained Language Mode bypass

@@ -21,14 +21,12 @@ namespace Stracciatella
                 "-v", "--verbose",
                 "-f", "--force",
                 "-c", "--command",
-                "-b", "--base64",
                 "-x", "--xor",
-                "-e", "--cmdencoded"
+                "-e", "--cmdalsoencoded"
             };
 
             public bool Verbose { get; set; }
             public string Command { get; set; }
-            public bool Base64 { get; set; }
             public Byte XorKey { get; set; }
             public bool Force { get; set; }
             public string ScriptPath { get; set; }
@@ -37,7 +35,6 @@ namespace Stracciatella
 
             public Options()
             {
-                Base64 = false;
                 Verbose = false;
                 Force = false;
                 XorKey = 0;
@@ -55,6 +52,7 @@ namespace Stracciatella
             Console.WriteLine("");
             Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
             Console.WriteLine("  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>");
+            Console.WriteLine("  v0.2");
             Console.WriteLine("");
         }
 
@@ -62,16 +60,18 @@ namespace Stracciatella
         {
             PrintBanner();
             Console.WriteLine("Usage: stracciatella.exe [options]");
-            Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter a pseudo-shell loop.");
+            Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter");
+            Console.WriteLine("                               a pseudo-shell loop.");
             Console.WriteLine("  -v, --verbose              - Prints verbose informations");
-            Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled. By default we bail out on failure.");
+            Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled.");
+            Console.WriteLine("                               By default we bail out on failure.");
             Console.WriteLine("  -c, --command              - Executes the specified commands.");
             Console.WriteLine("                               If command and script parameters were given, executes command after running script.");
-            Console.WriteLine("  -b, --base64               - Consider input as Base64 encoded. If both options, --base64 and --xor are specified,");
-            Console.WriteLine("                               the program will peel them off accordingly: XorDecode(Base64Decode(data), XorKey)");
-            Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a hex 8bit value being a key");
-            Console.WriteLine("  -e, --cmdencoded           - Input command (specified in '--command') is encoded as well, decode it before running. By default this program");
-            Console.WriteLine("                               will decode input file and consider command as given in plaintext. Using this switch tells it otherwise.");
+            Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal");
+            Console.WriteLine("                               (prefix with 0x for hex)");
+            Console.WriteLine("  -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.");
+            Console.WriteLine("                               Decodes input command after decoding and running input script file. ");
+            Console.WriteLine("                               By default we only decode input file and consider command given in plaintext");
         }
 
         private static Options ParseOptions(string[] args)
@@ -93,11 +93,6 @@ namespace Stracciatella
                 if(string.Equals(arg, "-v") || string.Equals(arg, "--verbose"))
                 {
                     options.Verbose = true;
-                    processed.Add(arg);
-                }
-                else if (string.Equals(arg, "-b") || string.Equals(arg, "--base64"))
-                {
-                    options.Base64 = true;
                     processed.Add(arg);
                 }
                 else if (string.Equals(arg, "-e") || string.Equals(arg, "--cmdencoded"))
@@ -130,11 +125,16 @@ namespace Stracciatella
                     }
 
                     string n = args[i + 1];
-                    if (!n.StartsWith("0x"))
+
+                    if (n.StartsWith("0x"))
                     {
-                        n = $"0x{n}";
+                        options.XorKey = Byte.Parse(n, NumberStyles.HexNumber);
                     }
-                    options.XorKey = Byte.Parse(n.Substring(2), NumberStyles.HexNumber);
+                    else
+                    {
+                        options.XorKey = Byte.Parse(n);
+                    }
+
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
                     i += 1;
@@ -158,7 +158,7 @@ namespace Stracciatella
                     processed.Add(args[i + 1]);
                     i += 1;
                 }
-                else if ((i < args.Length - 1) && !options.ValidOptions.Contains(arg))
+                else if ((i < args.Length - 1) && !options.ValidOptions.Contains(arg) && arg.Length > 0)
                 {
                     throw new ArgumentException($"Unknown parameter '{arg}'.");
                 }
@@ -177,11 +177,11 @@ namespace Stracciatella
                 throw new ArgumentException("You must either specify command or path to a script to execute.");
             }
 
-            if(options.Base64 || options.XorKey != 0)
+            if(options.XorKey != 0)
             {
                 if(options.Command.Length == 0 && options.ScriptPath.Length == 0)
                 {
-                    throw new ArgumentException("Specifying Base64 or XorKey options makes no sense if no command or script path was given.");
+                    throw new ArgumentException("Specifying XorKey option makes no sense if no command or script path was given.");
                 }
             }
 
@@ -225,7 +225,7 @@ namespace Stracciatella
             }
             catch (FormatException e)
             {
-                Info("[-] Could not obtain Powershell's version. Assuming 5.0");
+                Info($"[-] Could not obtain Powershell's version. Assuming 5.0 (exception: {e}");
             }
 
             if (psversion < 5.0 && !ProgramOptions.Force)
@@ -535,7 +535,6 @@ namespace Stracciatella
                         ProgramOptions.ScriptPath = "";
                     }
 
-                    Info($"PS> {command}");
                     output += ExecuteCommand(command, ps, host, !ProgramOptions.CmdEncoded);
                     command = "";
 
@@ -559,14 +558,9 @@ namespace Stracciatella
                     {
                         try
                         {
-                            if (ProgramOptions.Base64)
-                            {
-                                command = Decoder.Base64Decode(command);
-                            }
-
                             if (ProgramOptions.XorKey != 0)
                             {
-                                command = Decoder.XorDecode(command, ProgramOptions.XorKey);
+                                command = Decoder.XorDecode(Decoder.Base64DecodeBinary(command), ProgramOptions.XorKey);
                             }
                         }
                         catch (Exception e)
@@ -574,14 +568,8 @@ namespace Stracciatella
                             if (!silent) Info($"[-] Could not decode command: {e.Message.ToString()}");
                         }
                     }
-                    else
-                    {
-                        if (!silent)
-                        {
-                            Info($"[?] Decided not to decode input command starting with: '{command.Substring(0, 30)}'");
-                            Info($"[?] If you need that to be decoded as well, use --cmdencoded option.");
-                        }
-                    }
+
+                    if(!silent) Info($"PS> {command}");
 
                     pipe.Commands.AddScript(command);
                     pipe.Commands[0].MergeMyResults(PipelineResultTypes.Error, PipelineResultTypes.Output);
@@ -719,6 +707,8 @@ namespace Stracciatella
             {
                 //Info($"[-] It looks like no script path was given.");
             }
+
+            if (ProgramOptions.XorKey != 0) Info($"[.] Using decoding key: {ProgramOptions.XorKey}");
 
             if (ProgramOptions.Parashell)
             {

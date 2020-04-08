@@ -7,7 +7,6 @@ from pathlib import Path
 
 config = {
     'xorkey' : 0,
-    'base64' : False,
     'command' : '',
 }
 
@@ -15,9 +14,8 @@ def parseOptions(argv):
     global config
     parser = argparse.ArgumentParser(prog = argv[0], usage='%(prog)s [options] <command|file>')
 
-    parser.add_argument('command', nargs='?', help = 'Specifies either a command to encode or script file\'s path')
-    parser.add_argument('-b', '--base64', action='store_true', help = 'Consider input as Base64 encoded. If both options, --base64 and --xor are specified, the program will apply them accordingly: Base64Encode(XorEncode(data, XorKey))')
-    parser.add_argument('-x', '--xor', dest='xor', metavar = 'KEY', default = '0x00', type=str, help = 'Consider input as Base64 encoded. If both options, --base64 and --xor are specified, the program will apply them accordingly: Base64Encode(XorEncode(data, XorKey))')
+    parser.add_argument('command', nargs='?', help = 'Specifies either a command or script file\'s path for encoding')
+    parser.add_argument('-x', '--xor', dest='xor', metavar = 'KEY', default = '0x00', type=str, help = 'Specifies command/file XOR encode key (one byte)')
     parser.add_argument('-o', '--output', dest='output', metavar = 'PATH', type=str, help = '(optional) Output file. If not given - will echo output to stdout')
 
     opts = parser.parse_args()
@@ -33,7 +31,6 @@ def parseOptions(argv):
         print('[-] Incorrect xor key number format. Must be in Hex.')
         sys.exit(1)
 
-    config['base64'] = opts.base64
     config['command'] = opts.command
 
     if config['xorkey'] and config['xorkey'] != 0 and config['xorkey'] < 0 or config['xorkey'] > 0xff:
@@ -72,10 +69,7 @@ def main(argv):
     out = data
 
     if config['xorkey'] != 0:
-        out = xorEncode(out, ""+chr(config['xorkey']))
-
-    if config['base64']:
-        out = base64Encode(out)
+        out = base64Encode(xorEncode(out, ""+chr(config['xorkey'])))
 
     if (opts.output):
         with open(opts.output, 'wb') as f:
