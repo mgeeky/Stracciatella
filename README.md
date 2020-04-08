@@ -230,6 +230,7 @@ Bye!
 
 Currently, the way the Stracciatella provides runspace for powershell commands is not the most stealthiest out there. We basically create a Powershell runspace, which loads up corresponding .NET Assembly. This might be considered as a flag that stracciatella's process is somewhat shady. 
 
+- **Currently not able to perform a full cleanup of CLM disabling artefacts: DLL files in-use, left in %TEMP%.**
 - **Currently only supports .NET Framework 4.5+**
 - Create fully unmanaged powershell runspace
 - Implement rolling XOR with 2,3 and 4 bytes long key.
