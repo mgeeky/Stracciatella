@@ -4,6 +4,10 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 15.0.28307.572
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stracciatella", "Stracciatella.csproj", "{EAAFA0AC-E464-4FC4-9713-48AA9A6716FB}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5054C13F-1351-47B9-A6CA-25F4548F68A7} = {5054C13F-1351-47B9-A6CA-25F4548F68A7}
+		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6} = {1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ClmDisableDll", "..\ClmDisableDll\ClmDisableDll.vcxproj", "{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}"
 EndProject

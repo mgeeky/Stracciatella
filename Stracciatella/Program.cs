@@ -15,6 +15,8 @@ namespace Stracciatella
     {
         private static string GLOBAL_PROMPT_PREFIX = "Stracciatella";
 
+        private static bool CleanupNeeded = false;
+
         internal class Options
         {
             public string[] ValidOptions = {
@@ -255,6 +257,7 @@ namespace Stracciatella
             if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
                 DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
+                CleanupNeeded = true;
 
                 l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
                 Info($"[.] Language Mode after attempting to disable CLM: {l}");
@@ -548,7 +551,7 @@ namespace Stracciatella
                     output += ExecuteCommand(command, ps, host, !ProgramOptions.CmdEncoded);
                     command = "";
 
-                    if (!ProgramOptions.Nocleanup) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
+                    if (!ProgramOptions.Nocleanup && CleanupNeeded) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
                     System.GC.Collect();
                 }
 
@@ -664,7 +667,7 @@ namespace Stracciatella
                         input = "";
                     }
 
-                    if(!ProgramOptions.Nocleanup) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
+                    if(!ProgramOptions.Nocleanup && CleanupNeeded) DisableClm.Cleanup(ps, host, ProgramOptions.Verbose);
                 }
 
                 runspace.Close();
@@ -723,23 +726,32 @@ namespace Stracciatella
 
             if (ProgramOptions.XorKey != 0) Info($"[.] Using decoding key: {ProgramOptions.XorKey}");
 
-            if (ProgramOptions.Parashell)
+            try
             {
-                Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
+                if (ProgramOptions.Parashell)
                 {
-                    if (e.SpecialKey == ConsoleSpecialKey.ControlC)
+                    Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
                     {
-                        e.Cancel = true;
-                        Console.WriteLine("^C");
-                    }
-                };
+                        if (e.SpecialKey == ConsoleSpecialKey.ControlC)
+                        {
+                            e.Cancel = true;
+                            Console.WriteLine("^C");
+                        }
+                    };
 
-                Parashell();
+                    Parashell();
+                }
+                else
+                {
+                    string output = Execute(ProgramOptions.ScriptPath, ProgramOptions.Command);
+                    Console.WriteLine(output);
+                }
+
+                if (!ProgramOptions.Nocleanup && CleanupNeeded) DisableClm.Cleanup(null, null, ProgramOptions.Verbose);
             }
-            else
+            catch(Exception e)
             {
-                string output = Execute(ProgramOptions.ScriptPath, ProgramOptions.Command);
-                Console.WriteLine(output);
+                Console.WriteLine($"[!] That's embarassing. Unhandled exception occured:\n{e}");
             }
         }
     }
