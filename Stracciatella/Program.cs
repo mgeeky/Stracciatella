@@ -128,7 +128,7 @@ namespace Stracciatella
 
                     if (n.StartsWith("0x"))
                     {
-                        options.XorKey = Byte.Parse(n, NumberStyles.HexNumber);
+                        options.XorKey = Byte.Parse(n.Substring(2), NumberStyles.HexNumber);
                     }
                     else
                     {
