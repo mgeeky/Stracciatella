@@ -233,9 +233,9 @@ Currently, the way the Stracciatella provides runspace for powershell commands i
 - **Currently only supports .NET Framework 4.5+**
 - Create fully unmanaged powershell runspace
 - Implement rolling XOR with 2,3 and 4 bytes long key.
-- Add Constrained Language Mode bypass
+- _Add Constrained Language Mode bypass_
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
-- Disable Script Block logging first, than go after AMSI
+- ~Disable Script Block logging first, than go after AMSI~
 - ~Clean essential variables ASAP, preventing easy process memory dumping and recovery of provided scripts/commands~
 - Add Tab-autocompletion and support for Up/Down arrows (having provided that plaintext commands are not going to be stored in Straciatella's memory)
 - Add coloured outputs
