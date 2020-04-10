@@ -29,7 +29,7 @@ alias stracciatella {
     $args0 = $args;
     if(strlen($cradle) > 0) {
         $s = "; ";
-        if(right($cradle) eq ";") { $s = " "; }
+        if(right($cradle, 1) eq ";") { $s = " "; }
         $args = $cradle . $s . $args;
     }
 
