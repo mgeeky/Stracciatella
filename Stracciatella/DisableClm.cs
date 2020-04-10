@@ -28,6 +28,12 @@ namespace Stracciatella
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         static extern int GetCurrentThreadId();
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern bool FreeLibrary(IntPtr hModule);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr GetModuleHandleW(string moduleName);
+
         private static bool CreateCOM(PowerShell rs, CustomPSHost host, bool deregister = false)
         {
             string dllPath = @"$($Env:Temp)\ClmDisableDll.dll";
@@ -168,6 +174,18 @@ namespace Stracciatella
 
             try
             {
+                var mod = GetModuleHandleW("ClmDisableAssembly.dll");
+                if(mod != null)
+                {
+                    FreeLibrary(mod);
+                }
+
+                mod = GetModuleHandleW("ClmDisableDll.dll");
+                if (mod != null)
+                {
+                    FreeLibrary(mod);
+                }
+
                 File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
                 File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
             }
