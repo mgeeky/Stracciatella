@@ -64,7 +64,7 @@ namespace Stracciatella
         private static void Usage()
         {
             PrintBanner();
-            Console.WriteLine("Usage: stracciatella.exe [options]");
+            Console.WriteLine("Usage: stracciatella.exe [options] [command]");
             Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter");
             Console.WriteLine("                               a pseudo-shell loop.");
             Console.WriteLine("  -v, --verbose              - Prints verbose informations");
@@ -92,6 +92,7 @@ namespace Stracciatella
             }
 
             int i = 0;
+            int processedopts = 0;
             HashSet<string> processed = new HashSet<string>();
 
             for(; i < args.Length; i++)
@@ -101,21 +102,25 @@ namespace Stracciatella
                 {
                     options.Verbose = true;
                     processed.Add(arg);
+                    processedopts += 1;
                 }
                 else if (string.Equals(arg, "-e") || string.Equals(arg, "--cmdencoded"))
                 {
                     options.CmdEncoded = true;
                     processed.Add(arg);
+                    processedopts += 1;
                 }
                 else if (string.Equals(arg, "-f") || string.Equals(arg, "--force"))
                 {
                     options.Force = true;
                     processed.Add(arg);
+                    processedopts += 1;
                 }
                 else if (string.Equals(arg, "-n") || string.Equals(arg, "--nocleanup"))
                 {
                     options.Nocleanup = true;
                     processed.Add(arg);
+                    processedopts += 1;
                 }
                 else if (string.Equals(arg, "-c") || string.Equals(arg, "--command"))
                 {
@@ -127,6 +132,7 @@ namespace Stracciatella
                     options.Command = args[i+1];
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
+                    processedopts += 2;
                     i += 1;
                 }
                 else if (string.Equals(arg, "-x") || string.Equals(arg, "--xor"))
@@ -149,6 +155,7 @@ namespace Stracciatella
 
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
+                    processedopts += 2;
                     i += 1;
                 }
                 else if (string.Equals(arg, "-s") || string.Equals(arg, "--script"))
@@ -159,12 +166,7 @@ namespace Stracciatella
                     }
 
                     string p = args[i + 1];
-                    if(!File.Exists(p))
-                    {
-                        Info($"[-] Script file does not exist. Will not load it: '{p}'");
-                        p = "";
-                    }
-
+                    processedopts += 2;
                     options.ScriptPath = p;
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
@@ -174,6 +176,13 @@ namespace Stracciatella
                 {
                     throw new ArgumentException($"Unknown parameter '{arg}'.");
                 }
+            }
+
+            if (processedopts < args.Length )
+            {
+                var remainderArgs = args.Skip(processedopts).Take(args.Length - processedopts).ToArray();
+
+                options.Command = String.Join(" ", remainderArgs);
             }
 
             if (options.Command.Length == 0)
@@ -535,13 +544,45 @@ namespace Stracciatella
                         }
                     }
 
-                    string scriptContents = "";
                     if (scriptPath.Length > 0)
                     {
-                        scriptContents = GetFileContents(scriptPath);
+                        bool success = true;
+                        string scriptContents = "";
+                        bool silent = false;
 
-                        Info($"PS> . '{scriptPath}'");
-                        output += ExecuteCommand(scriptContents, ps, host, false, false, false);
+                        try
+                        {
+                            if (scriptPath.StartsWith("http://") || scriptPath.StartsWith("https://"))
+                            {
+                                using (var wc = new System.Net.WebClient())
+                                {
+                                    scriptContents = wc.DownloadString(scriptPath);
+                                }
+
+                                silent = true;
+                                Info($"Executing downloaded script file: {scriptPath}");
+                            }
+                            else
+                            {
+                                if (!File.Exists(scriptPath))
+                                {
+                                    throw new Exception($"Script file does not exist.Will not load it: '{scriptPath}'");
+                                }
+
+                                scriptContents = GetFileContents(scriptPath);
+                                Info($"PS> . '{scriptPath}'");
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Info($"Could not fetch script file/URL contents. Exception: {e}");
+                            success = false;
+                        }
+
+                        if (success && scriptContents.Length > 0)
+                        {
+                            output += ExecuteCommand(scriptContents, ps, host, false, silent, false);
+                        }
 
                         scriptContents = "";
                         scriptPath = "";
