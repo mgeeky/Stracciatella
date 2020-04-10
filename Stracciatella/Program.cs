@@ -66,13 +66,14 @@ namespace Stracciatella
             PrintBanner();
             Console.WriteLine("Usage: stracciatella.exe [options] [command]");
             Console.WriteLine("  -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter");
-            Console.WriteLine("                               a pseudo-shell loop.");
+            Console.WriteLine("                               a pseudo-shell loop. This can be also a HTTP(S) URL to download & execute powershell script.");
             Console.WriteLine("  -v, --verbose              - Prints verbose informations");
             Console.WriteLine("  -n, --nocleanup            - Don't remove CLM disable leftovers (DLL files in TEMP and COM registry keys).");
             Console.WriteLine("                               By default these are going to be always removed. ");
             Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled.");
             Console.WriteLine("                               By default we bail out on failure.");
-            Console.WriteLine("  -c, --command              - Executes the specified commands.");
+            Console.WriteLine("  -c, --command              - Executes the specified commands You can either use -c or append commands after");
+            Console.WriteLine("                               stracciatella parameters: cmd> straciatella ipconfig /all");
             Console.WriteLine("                               If command and script parameters were given, executes command after running script.");
             Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal");
             Console.WriteLine("                               (prefix with 0x for hex)");
@@ -171,10 +172,6 @@ namespace Stracciatella
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
                     i += 1;
-                }
-                else if ((i < args.Length - 1) && !options.ValidOptions.Contains(arg) && arg.Length > 0)
-                {
-                    throw new ArgumentException($"Unknown parameter '{arg}'.");
                 }
             }
 
