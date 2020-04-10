@@ -782,7 +782,7 @@ namespace Stracciatella
                 else
                 {
                     string output = Execute(ProgramOptions.ScriptPath, ProgramOptions.Command);
-                    Console.WriteLine(output);
+                    Console.WriteLine("\n" + output);
                 }
 
                 if (!ProgramOptions.Nocleanup && CleanupNeeded) DisableClm.Cleanup(null, null, ProgramOptions.Verbose);
