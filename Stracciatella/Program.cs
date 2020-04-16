@@ -260,7 +260,8 @@ namespace Stracciatella
             l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
             Info($"[.] Language Mode: {l}");
 
-            if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
+            //if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
+            if(true)
             {
                 DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
                 CleanupNeeded = true;
@@ -631,14 +632,13 @@ namespace Stracciatella
                     {
                         pipe.Invoke();
 
-                        command = "";
-
                         output = ((CustomPSHostUserInterface)host.UI).Output;
                         ((CustomPSHostUserInterface)host.UI)._sb = new StringBuilder();
+                        command = "";
                     }
-                    catch(Exception e)
+                    catch (Exception e)
                     {
-                        Console.WriteLine(e.ToString());
+                        if (!silent) Console.WriteLine(e.ToString());
                     }
                 }
             }
@@ -766,6 +766,7 @@ namespace Stracciatella
 
             try
             {
+                AppDomain dom = AppDomain.CreateDomain("sandbox");
                 if (ProgramOptions.Parashell)
                 {
                     Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
@@ -782,8 +783,15 @@ namespace Stracciatella
                 else
                 {
                     string output = Execute(ProgramOptions.ScriptPath, ProgramOptions.Command);
-                    Console.WriteLine("\n" + output);
+                    if (output.Length > 0)
+                    {
+                        Console.WriteLine("\n" + output);
+                    }
                 }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
 
                 if (!ProgramOptions.Nocleanup && CleanupNeeded) DisableClm.Cleanup(null, null, ProgramOptions.Verbose);
             }

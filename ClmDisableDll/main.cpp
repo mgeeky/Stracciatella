@@ -11,14 +11,15 @@
 #include <metahost.h>
 #include <stdio.h>
 
-#pragma comment(lib, "mscoree.lib")
+//#pragma comment(lib, "mscoree.lib")
 
 //////////////////////////////////////////////////
 //
 // Specify below .NET assembly, main class to instantiate and parameters to pass there.
 
 namespace CustomAssemblyParameters {
-    LPCWSTR AssemblyName    = L"%TEMP%\\ClmDisableAssembly.dll";
+    LPCWSTR AssemblyName    = L"ClmDisableAssembly.dll";
+    LPCWSTR AssemblyPath    = L"%TEMP%";
     LPCWSTR TypeName        = L"ClmDisableAssembly.ClmDisableAssembly";
     LPCWSTR MethodName      = L"Start";
     LPCWSTR Argument        = L"(called from native CLR host)";
@@ -99,7 +100,11 @@ void DoProcessAttach()
     runtimeHost->Start();
 
     WCHAR assemblyPath[1024] = L"";
-    ExpandEnvironmentStringsW(CustomAssemblyParameters::AssemblyName, assemblyPath, _countof(assemblyPath));
+    ExpandEnvironmentStringsW(CustomAssemblyParameters::AssemblyPath, assemblyPath, _countof(assemblyPath));
+
+    wcscat_s(assemblyPath, L"\\");
+    wcscat_s(assemblyPath, CustomAssemblyParameters::AssemblyName);
+
     LPCWSTR assemblyPathPtr = assemblyPath;
 
     HRESULT hres = runtimeHost->ExecuteInDefaultAppDomain(
@@ -116,7 +121,6 @@ void DoProcessAttach()
     }
 
     //runtimeHost->Stop();
-    //runtimeHost->Release();
     runtimeInfo->Release();
     metaHost->Release();
 }
