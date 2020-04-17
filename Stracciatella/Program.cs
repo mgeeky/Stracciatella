@@ -260,8 +260,7 @@ namespace Stracciatella
             l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
             Info($"[.] Language Mode: {l}");
 
-            //if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
-            if(true)
+            if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
                 DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
                 CleanupNeeded = true;
