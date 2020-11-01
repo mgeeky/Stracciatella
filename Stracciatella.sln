@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.572
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30002.166
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stracciatella", "Stracciatella\Stracciatella.csproj", "{EAAFA0AC-E464-4FC4-9713-48AA9A6716FB}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -36,6 +36,7 @@ Global
 		{EAAFA0AC-E464-4FC4-9713-48AA9A6716FB}.Release|x86.ActiveCfg = Release|Any CPU
 		{EAAFA0AC-E464-4FC4-9713-48AA9A6716FB}.Release|x86.Build.0 = Release|Any CPU
 		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}.Debug|Any CPU.Build.0 = Debug|Win32
 		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}.Debug|x64.ActiveCfg = Debug|x64
 		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}.Debug|x64.Build.0 = Debug|x64
 		{1FF6D4A0-E8D6-4D9F-AE57-FB0DCAE6F8A6}.Debug|x86.ActiveCfg = Debug|Win32
