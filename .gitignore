@@ -6,3 +6,4 @@
 /*/Release/
 *.ilk
 *.pdb
+/ClmDisableDll/ClmDisableDll.dll
