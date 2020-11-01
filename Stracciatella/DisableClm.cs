@@ -12,6 +12,8 @@ using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 
+#pragma warning disable CS0168
+
 namespace Stracciatella
 {
     class DisableClm

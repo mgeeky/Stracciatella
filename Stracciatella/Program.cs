@@ -7,7 +7,9 @@ using System.Text;
 using System.Runtime.InteropServices;
 using System.Globalization;
 using System.Reflection;
+using System.Threading;
 using System.Collections.Generic;
+using System.IO.Pipes;
 
 namespace Stracciatella
 {
@@ -25,11 +27,13 @@ namespace Stracciatella
                 "-c", "--command",
                 "-x", "--xor",
                 "-e", "--cmdalsoencoded",
-                "-n", "--nocleanup"
+                "-n", "--nocleanup",
+                "-p", "--pipe"
             };
 
             public bool Verbose { get; set; }
             public string Command { get; set; }
+            public string PipeName { get; set; }
             public Byte XorKey { get; set; }
             public bool Force { get; set; }
             public bool Nocleanup { get; set; }
@@ -47,6 +51,7 @@ namespace Stracciatella
                 ScriptPath = "";
                 Parashell = false;
                 CmdEncoded = false;
+                PipeName = "";
             }
         }
 
@@ -77,6 +82,7 @@ namespace Stracciatella
             Console.WriteLine("                               If command and script parameters were given, executes command after running script.");
             Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal");
             Console.WriteLine("                               (prefix with 0x for hex)");
+            Console.WriteLine("  -p <name>, --pipe <name>   - Read powershell commands from a specified named pipe");
             Console.WriteLine("  -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.");
             Console.WriteLine("                               Decodes input command after decoding and running input script file. ");
             Console.WriteLine("                               By default we only decode input file and consider command given in plaintext");
@@ -153,6 +159,20 @@ namespace Stracciatella
                     {
                         options.XorKey = Byte.Parse(n);
                     }
+
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
+                    processedopts += 2;
+                    i += 1;
+                }
+                else if (string.Equals(arg, "-p") || string.Equals(arg, "--pipe"))
+                {
+                    if (args.Length - 1 < i + 1)
+                    {
+                        throw new ArgumentException("No value for pipe argument.");
+                    }
+
+                    options.PipeName = args[i + 1];
 
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
@@ -725,6 +745,45 @@ namespace Stracciatella
             return buf;
         }
 
+        private static string ReceiveCommandsFromPipe(string pipeName)
+        {
+            string result = null;
+            Thread thread = new System.Threading.Thread(() =>
+            {
+                result = ReadFromPipe(pipeName);
+            });
+
+            thread.Start();
+            thread.Join(5000);
+
+            Info($"[.] Read from pipe ({result.Length} bytes) starting with: \"{result.Substring(0, 16)}\"...");
+            return result;
+        }
+
+        private static string ReadFromPipe(string pipeName)
+        {
+            string data = "";
+            try
+            {
+                var client = new NamedPipeClientStream(pipeName);
+                client.Connect();
+                StreamReader reader = new StreamReader(client);
+
+                while (true)
+                {
+                    string input = reader.ReadLine();
+                    if (String.IsNullOrEmpty(input)) break;
+                    data += input;
+                }
+            }
+            catch (Exception e)
+            {
+                Info($"[-] Could not read from pipe: {e.Message}");
+            }
+
+            return data;
+        }
+
         static void Main(string[] args)
         {
             if ((args.Length >= 1) && (String.Equals(args[0], "--help", StringComparison.CurrentCultureIgnoreCase)
@@ -756,9 +815,16 @@ namespace Stracciatella
             {
                 Info($"[.] Will load script file: '{ProgramOptions.ScriptPath}'");
             }
-            else
+            else if(ProgramOptions.PipeName.Length > 0)
             {
-                //Info($"[-] It looks like no script path was given.");
+                Info($"[.] Receiving input commands from a named pipe: \\\\.\\pipe\\{ProgramOptions.PipeName} ...");
+                ProgramOptions.Command = ReceiveCommandsFromPipe(ProgramOptions.PipeName);
+
+                if(ProgramOptions.Command.Length == 0)
+                {
+                    Console.WriteLine("No bytes were received from a named pipe.");
+                    return;
+                }
             }
 
             if (ProgramOptions.XorKey != 0) Info($"[.] Using decoding key: {ProgramOptions.XorKey}");

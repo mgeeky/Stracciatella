@@ -2,6 +2,8 @@
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 
+#pragma warning disable CS0168
+
 namespace ClmDisableAssembly
 {
     public class ClmDisableAssembly : MarshalByRefObject
