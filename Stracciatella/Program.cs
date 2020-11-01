@@ -745,29 +745,14 @@ namespace Stracciatella
             return buf;
         }
 
-        private static string ReceiveCommandsFromPipe(string pipeName)
-        {
-            string result = null;
-            Thread thread = new System.Threading.Thread(() =>
-            {
-                result = ReadFromPipe(pipeName);
-            });
-
-            thread.Start();
-            thread.Join(5000);
-
-            Info($"[.] Read from pipe ({result.Length} bytes) starting with: \"{result.Substring(0, 16)}\"...");
-            return result;
-        }
-
         private static string ReadFromPipe(string pipeName)
         {
             string data = "";
             try
             {
-                var client = new NamedPipeClientStream(pipeName);
-                client.Connect();
-                StreamReader reader = new StreamReader(client);
+                var server = new NamedPipeServerStream(pipeName);
+                server.WaitForConnection();
+                StreamReader reader = new StreamReader(server);
 
                 while (true)
                 {
@@ -782,6 +767,25 @@ namespace Stracciatella
             }
 
             return data;
+        }
+        private static string ReceiveCommandsFromPipe(string pipeName)
+        {
+            string result = null;
+            Thread thread = new System.Threading.Thread(() =>
+            {
+                result = ReadFromPipe(pipeName);
+            });
+
+            thread.Start();
+            thread.Join(150000);
+            thread.Interrupt();
+
+            if (result != null)
+            {
+                Info($"[.] Read from pipe ({result.Length} bytes) starting with: \"{result.Substring(0, 16)}\"...");
+                return result;
+            }
+            return "";
         }
 
         static void Main(string[] args)
@@ -825,6 +829,8 @@ namespace Stracciatella
                     Console.WriteLine("No bytes were received from a named pipe.");
                     return;
                 }
+
+                ProgramOptions.Parashell = false;
             }
 
             if (ProgramOptions.XorKey != 0) Info($"[.] Using decoding key: {ProgramOptions.XorKey}");
