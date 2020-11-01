@@ -1,0 +1,8 @@
+/.vs/
+/*/obj/*
+/packages/
+/*/bin/
+/*/Debug/
+/*/Release/
+*.ilk
+*.pdb
