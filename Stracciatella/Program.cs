@@ -31,11 +31,13 @@ namespace Stracciatella
                 "-x", "--xor",
                 "-e", "--cmdalsoencoded",
                 "-n", "--nocleanup",
+                "-C", "--leaveclm",
                 "-p", "--pipe",
                 "-t", "--timeout",
             };
 
             public bool Verbose { get; set; }
+            public bool DontDisableClm { get; set; }
             public string Command { get; set; }
             public string PipeName { get; set; }
             public uint Timeout { get; set; }
@@ -49,6 +51,7 @@ namespace Stracciatella
             public Options()
             {
                 Verbose = false;
+                DontDisableClm = false;
                 Force = false;
                 XorKey = 0;
                 Command = "";
@@ -81,6 +84,7 @@ namespace Stracciatella
             Console.WriteLine("  -v, --verbose              - Prints verbose informations");
             Console.WriteLine("  -n, --nocleanup            - Don't remove CLM disable leftovers (DLL files in TEMP and COM registry keys).");
             Console.WriteLine("                               By default these are going to be always removed. ");
+            Console.WriteLine("  -C, --leaveclm             - Don't attempt to disable CLM. Stealthier. Will avoid leaving CLM disable artefacts undeleted.");
             Console.WriteLine("  -f, --force                - Proceed with execution even if Powershell defenses were not disabled.");
             Console.WriteLine("                               By default we bail out on failure.");
             Console.WriteLine("  -c, --command              - Executes the specified commands You can either use -c or append commands after");
@@ -123,6 +127,12 @@ namespace Stracciatella
                 else if (string.Equals(arg, "-e") || string.Equals(arg, "--cmdencoded"))
                 {
                     options.CmdEncoded = true;
+                    processed.Add(arg);
+                    processedopts += 1;
+                }
+                else if (string.Equals(arg, "-C") || string.Equals(arg, "--leaveclm"))
+                {
+                    options.DontDisableClm = true;
                     processed.Add(arg);
                     processedopts += 1;
                 }
@@ -304,7 +314,9 @@ namespace Stracciatella
 
             if (!String.Equals(l, "FullLanguage", StringComparison.CurrentCultureIgnoreCase))
             {
-                DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
+                if (!ProgramOptions.DontDisableClm) DisableClm.DoDisable(rs, host, ProgramOptions.Verbose);
+                else Info("[-] Constrained Language Mode enabled: couldn't disable as explicitly told me not to do so.");
+
                 CleanupNeeded = true;
 
                 l = ExecuteCommand("$ExecutionContext.SessionState.LanguageMode", rs, host, true, true).Trim();
