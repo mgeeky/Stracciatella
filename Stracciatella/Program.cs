@@ -10,6 +10,9 @@ using System.Reflection;
 using System.Threading;
 using System.Collections.Generic;
 using System.IO.Pipes;
+using System.Numerics;
+using System.Security.Principal;
+using System.Security.AccessControl;
 
 namespace Stracciatella
 {
@@ -28,12 +31,14 @@ namespace Stracciatella
                 "-x", "--xor",
                 "-e", "--cmdalsoencoded",
                 "-n", "--nocleanup",
-                "-p", "--pipe"
+                "-p", "--pipe",
+                "-t", "--timeout",
             };
 
             public bool Verbose { get; set; }
             public string Command { get; set; }
             public string PipeName { get; set; }
+            public uint Timeout { get; set; }
             public Byte XorKey { get; set; }
             public bool Force { get; set; }
             public bool Nocleanup { get; set; }
@@ -52,6 +57,7 @@ namespace Stracciatella
                 Parashell = false;
                 CmdEncoded = false;
                 PipeName = "";
+                Timeout = 60000;
             }
         }
 
@@ -62,7 +68,7 @@ namespace Stracciatella
             Console.WriteLine("");
             Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
             Console.WriteLine("  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>");
-            Console.WriteLine("  v0.2");
+            Console.WriteLine("  v0.3");
             Console.WriteLine("");
         }
 
@@ -82,7 +88,10 @@ namespace Stracciatella
             Console.WriteLine("                               If command and script parameters were given, executes command after running script.");
             Console.WriteLine("  -x <key>, --xor <key>      - Consider input as XOR encoded, where <key> is a one byte key in decimal");
             Console.WriteLine("                               (prefix with 0x for hex)");
-            Console.WriteLine("  -p <name>, --pipe <name>   - Read powershell commands from a specified named pipe");
+            Console.WriteLine("  -p <name>, --pipe <name>   - Read powershell commands from a specified named pipe. Command must be preceded with 4 bytes of");
+            Console.WriteLine("                               its length coded in little-endian (Length-Value notation).");
+            Console.WriteLine("  -t <millisecs>, --timeout <millisecs>   ");
+            Console.WriteLine("                             - Specifies timeout for pipe read operation (in milliseconds). Default: 60 secs. 0 - infinite.");
             Console.WriteLine("  -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.");
             Console.WriteLine("                               Decodes input command after decoding and running input script file. ");
             Console.WriteLine("                               By default we only decode input file and consider command given in plaintext");
@@ -137,6 +146,19 @@ namespace Stracciatella
                     }
 
                     options.Command = args[i+1];
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
+                    processedopts += 2;
+                    i += 1;
+                }
+                else if (string.Equals(arg, "-t") || string.Equals(arg, "--timeout"))
+                {
+                    if (args.Length - 1 < i + 1)
+                    {
+                        throw new ArgumentException("No value for Timeout argument.");
+                    }
+
+                    options.Timeout = UInt32.Parse(args[i + 1]);
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
                     processedopts += 2;
@@ -217,9 +239,9 @@ namespace Stracciatella
 
             if(options.XorKey != 0)
             {
-                if(options.Command.Length == 0 && options.ScriptPath.Length == 0)
+                if(options.Command.Length == 0 && options.ScriptPath.Length == 0 && options.PipeName.Length == 0)
                 {
-                    throw new ArgumentException("Specifying XorKey option makes no sense if no command or script path was given.");
+                    throw new ArgumentException("Specifying XorKey option makes no sense if no command, script path nor pipename were given.");
                 }
             }
 
@@ -745,20 +767,81 @@ namespace Stracciatella
             return buf;
         }
 
+        // Creates a PipeSecurity that allows users read/write access
+        // Source: https://stackoverflow.com/a/51559281
+        private static PipeSecurity CreateSystemIOPipeSecurity()
+        {
+            PipeSecurity pipeSecurity = new PipeSecurity();
+            var worldSid = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+            var authenticatedSid = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
+            var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+            var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            
+            pipeSecurity.AddAccessRule(new PipeAccessRule(systemSid, PipeAccessRights.FullControl, AccessControlType.Allow));
+            pipeSecurity.AddAccessRule(new PipeAccessRule(adminsSid, PipeAccessRights.FullControl, AccessControlType.Allow));
+
+            // Allow Everyone read and write access to the pipe. 
+            pipeSecurity.AddAccessRule(new PipeAccessRule(worldSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+            pipeSecurity.AddAccessRule(new PipeAccessRule(authenticatedSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+
+            return pipeSecurity;
+        }
+
         private static string ReadFromPipe(string pipeName)
         {
             string data = "";
+            uint bytesRead = 0;
+
             try
             {
-                var server = new NamedPipeServerStream(pipeName);
+                PipeSecurity pipeSecurity = CreateSystemIOPipeSecurity();
+                var server = new NamedPipeServerStream(
+                    pipeName,
+                    PipeDirection.InOut,
+                    1,
+                    PipeTransmissionMode.Message,
+                    PipeOptions.Asynchronous,
+                    0x4000,
+                    0x400,
+                    pipeSecurity,
+                    //null,
+                    HandleInheritability.Inheritable);
+
                 server.WaitForConnection();
                 StreamReader reader = new StreamReader(server);
 
+                byte[] chars = new byte[4];
+
                 while (true)
                 {
+                    bool skip = false;
+
+                    // CobaltStrike's command builder prepends message with 4 bytes of its length.
+                    // we gotta read those 4 bytes first, then fetch the rest of the message.
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if( reader.Peek() != -1)
+                        {
+                            chars[i] = (byte)reader.Read();
+                            bytesRead++;
+                        }
+                        else
+                        {
+                            skip = true;
+                        }
+                    }
+
+                    if (skip) continue;
+
+                    uint expectedLen = BitConverter.ToUInt32(chars, 0);
                     string input = reader.ReadLine();
+
                     if (String.IsNullOrEmpty(input)) break;
+
                     data += input;
+                    bytesRead += (uint)input.Length;
+                    //if (bytesRead >= expectedLen) break;
+                    break;
                 }
             }
             catch (Exception e)
@@ -768,7 +851,7 @@ namespace Stracciatella
 
             return data;
         }
-        private static string ReceiveCommandsFromPipe(string pipeName)
+        private static string ReceiveCommandsFromPipe(string pipeName, uint timeout)
         {
             string result = null;
             Thread thread = new System.Threading.Thread(() =>
@@ -777,12 +860,21 @@ namespace Stracciatella
             });
 
             thread.Start();
-            thread.Join(150000);
+            if (timeout == 0)
+            {
+                Info($"[.] Will wait infinitely long for data to read from pipe.");
+                thread.Join();
+            }
+            else
+            {
+                Info($"[.] Will wait {timeout} milliseconds for data to read from pipe.");
+                thread.Join((int)timeout);
+            }
             thread.Interrupt();
 
             if (result != null)
             {
-                Info($"[.] Read from pipe ({result.Length} bytes) starting with: \"{result.Substring(0, 16)}\"...");
+                Info($"[.] Read from pipe ({result.Length} bytes).");
                 return result;
             }
             return "";
@@ -822,7 +914,7 @@ namespace Stracciatella
             else if(ProgramOptions.PipeName.Length > 0)
             {
                 Info($"[.] Receiving input commands from a named pipe: \\\\.\\pipe\\{ProgramOptions.PipeName} ...");
-                ProgramOptions.Command = ReceiveCommandsFromPipe(ProgramOptions.PipeName);
+                ProgramOptions.Command = ReceiveCommandsFromPipe(ProgramOptions.PipeName, ProgramOptions.Timeout);
 
                 if(ProgramOptions.Command.Length == 0)
                 {

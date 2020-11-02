@@ -71,6 +71,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="FodyWeavers.xsd">
       <SubType>Designer</SubType>
     </None>

