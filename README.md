@@ -157,7 +157,19 @@ Whereas:
 
 ## Cobalt Strike support
 
-Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick` (by previously importing powershell scripts via `stracciatella-import`). The input parameter will be xored with a random key. The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
+Stracciatella comes with Aggressor script that when loaded exposes `stracciatella` command in the Beacon console. The usage is pretty much similar to `powerpick` (by previously importing powershell scripts via `stracciatella-import`). The input parameter will be xored with a random key and passed over a randomly named Pipe to the Stracciatella's runspace. 
+
+Following Cobalt Strike commands are available:
+
+- *`stracciatella [-v] <command>`* - executes given commands
+- *`stracciatella-remote [-v] <machine> <pipename> <command>`* - executes given commands on a remote machine on specified pipe
+- *`stracciatella-import <scriptpath>`* - imports a powershell script for use with Stracciatella
+- *`stracciatella-clear`* - clears imported script on that Beacon
+- *`stracciatella-timeout <milliseconds>`* - adjusts default named pipe read timeout
+
+One of the strategies for working with Stracciatella could be to configure a long enough pipe read timeout (1), launch it on a remote machine (2) thus having option for lateral movement over named pipe with a litle help of Stracciatella.
+
+The advantage over `powerpick` is that the Stracciatella does not patch _AMSI.dll_ in the way like Powerpick does (_AmsiScanBuffer_ patch), thus potentially generating less forensic noise as seen by EDRs looking for in-memory patches. Also, Stracciatella will eventually be able to stabily bypass _Constrained Language Mode_ which is currently not possible using `powerpick`.:
 
 ```
 beacon> stracciatella-import PowerView.ps1
