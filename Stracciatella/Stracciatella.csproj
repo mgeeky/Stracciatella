@@ -10,6 +10,7 @@
     <RootNamespace>Stracciatella</RootNamespace>
     <AssemblyName>Stracciatella</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
@@ -92,4 +93,5 @@
     <PreBuildEvent>powershell.exe -File "$(SolutionDir)Stracciatella\Out-CSharpDataClass.ps1" -SolutionDir "$(SolutionDir)." -Target1 "$(SolutionDir)ClmDisableAssembly\bin\$(ConfigurationName)\ClmDisableAssembly.dll" -Target2 "$(SolutionDir)ClmDisableDll\ClmDisableDll.dll" -Verbose</PreBuildEvent>
   </PropertyGroup>
   <Import Project="..\packages\Fody.6.3.0\build\Fody.targets" Condition="Exists('..\packages\Fody.6.3.0\build\Fody.targets')" />
+  <Import Project="VersionSpecificSymbols.prop" />
 </Project>

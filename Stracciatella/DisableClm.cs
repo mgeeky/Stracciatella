@@ -7,9 +7,10 @@ using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
-using System.Threading.Tasks;
 using System.Management.Automation.Runspaces;
+#if NETFX_471
 using System.Runtime.InteropServices;
+#endif
 using System.Diagnostics;
 
 #pragma warning disable CS0168
@@ -28,6 +29,10 @@ namespace Stracciatella
         private static string OUTPUT_CLMDISABLEASSEMBLY_PATH = @"%TEMP%\ClmDisableAssembly.dll";
         private static string OUTPUT_CLMDISABLEDLL_PATH = @"%TEMP%\ClmDisableDll.dll";
 
+
+        // The DLLs unloading functionality may be compiled into Stracciatella only when .Net Framework 4.7.1+ is choosen,
+        // as that framework introduced System.Runtime.InteropServices . 
+#if NETFX_471
         private static List<Module> CollectModules(Process process)
         {
             List<Module> collectedModules = new List<Module>();
@@ -67,40 +72,43 @@ namespace Stracciatella
  
         internal class Native
         {
-            [StructLayout(LayoutKind.Sequential)]
-            public struct ModuleInformation
-            {
-                public IntPtr lpBaseOfDll;
-                public uint SizeOfImage;
-                public IntPtr EntryPoint;
-            }
+            
+           [StructLayout(LayoutKind.Sequential)]
+           public struct ModuleInformation
+           {
+               public IntPtr lpBaseOfDll;
+               public uint SizeOfImage;
+               public IntPtr EntryPoint;
+           }
 
-            internal enum ModuleFilter
-            {
-                ListModulesDefault = 0x0,
-                ListModules32Bit = 0x01,
-                ListModules64Bit = 0x02,
-                ListModulesAll = 0x03,
-            }
+           internal enum ModuleFilter
+           {
+               ListModulesDefault = 0x0,
+               ListModules32Bit = 0x01,
+               ListModules64Bit = 0x02,
+               ListModulesAll = 0x03,
+           }
 
-            [DllImport("psapi.dll")]
-            public static extern bool EnumProcessModulesEx(IntPtr hProcess, [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U4)] [In][Out] IntPtr[] lphModule, int cb, [MarshalAs(UnmanagedType.U4)] out int lpcbNeeded, uint dwFilterFlag);
+           [DllImport("psapi.dll")]
+           public static extern bool EnumProcessModulesEx(IntPtr hProcess, [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U4)] [In][Out] IntPtr[] lphModule, int cb, [MarshalAs(UnmanagedType.U4)] out int lpcbNeeded, uint dwFilterFlag);
 
-            [DllImport("psapi.dll")]
-            public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In] [MarshalAs(UnmanagedType.U4)] uint nSize);
+           [DllImport("psapi.dll")]
+           public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In] [MarshalAs(UnmanagedType.U4)] uint nSize);
 
-            [DllImport("psapi.dll", SetLastError = true)]
-            public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out ModuleInformation lpmodinfo, uint cb);
+           [DllImport("psapi.dll", SetLastError = true)]
+           public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out ModuleInformation lpmodinfo, uint cb);
 
-            [DllImport("kernel32.dll")]
-            public static extern int GetCurrentThreadId();
+           [DllImport("kernel32.dll")]
+           public static extern int GetCurrentThreadId();
 
-            [DllImport("kernel32.dll", SetLastError = true)]
-            public static extern bool FreeLibrary(IntPtr hModule);
+           [DllImport("kernel32.dll", SetLastError = true)]
+           public static extern bool FreeLibrary(IntPtr hModule);
 
-            [DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
-            public static extern IntPtr GetModuleHandle(string lpModuleName);
+           [DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+           public static extern IntPtr GetModuleHandle(string lpModuleName);
+           
         }
+#endif
 
         internal class Module
         {
@@ -206,7 +214,9 @@ namespace Stracciatella
             if (DisableClm.Verbose) Console.WriteLine("[+] Disabling CLM globally.");
             if (DisableClm.Verbose)
             {
-                Console.WriteLine("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() + " / " + Native.GetCurrentThreadId().ToString());
+                Console.WriteLine("\tCurrent thread ID (managed/unmanaged): " + System.Threading.Thread.CurrentThread.ManagedThreadId.ToString() 
+                //    + " / " + Native.GetCurrentThreadId().ToString()
+                );
             }
 
             try
@@ -250,6 +260,7 @@ namespace Stracciatella
             return ProperDisable(rs, host);
         }
 
+#if NETFX_471
         private static bool UnloadAndDeleteModule(List<Module> modules, string name, string path, bool verb)
         {
             try
@@ -285,6 +296,7 @@ namespace Stracciatella
                 return false;
             }
         }
+#endif
 
         public static bool Cleanup(PowerShell rs, CustomPSHost host, bool verb)
         {
@@ -293,6 +305,8 @@ namespace Stracciatella
                 if (verb) Console.WriteLine("\n[.] Cleaning up CLM disable artefacts...");
                 CreateCOM(rs, host, true);
             }
+
+#if NETFX_471
             else
             {
                 bool ret = true;
@@ -316,6 +330,7 @@ namespace Stracciatella
                     return false;
                 }
             }
+#endif
 
             return true;
         }

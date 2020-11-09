@@ -10,7 +10,7 @@ using System.Reflection;
 using System.Threading;
 using System.Collections.Generic;
 using System.IO.Pipes;
-using System.Numerics;
+//using System.Numerics;
 using System.Security.Principal;
 using System.Security.AccessControl;
 
@@ -698,6 +698,15 @@ namespace Stracciatella
             return output;
         }
 
+        // string Join(this IEnumerable<string> strings, string delimiter)
+        // was not introduced until 4.0. So provide our own.
+#if !NETFX_40 && NETFX_35
+        public static string Join(string delimiter, IEnumerable<string> strings)
+        {
+            return string.Join(delimiter, strings.ToArray());
+        }
+#endif
+
         private static string Input(string prompt)
         {
             List<string> input = new List<string>();
@@ -711,8 +720,12 @@ namespace Stracciatella
                 // FIXME: Break after first line;
                 break;
             }
-            
+
+#if !NETFX_40 && NETFX_35
+            return Join("\r\n", input);
+#else
             return String.Join("\r\n", input);
+#endif
         }
 
         private static void Parashell()

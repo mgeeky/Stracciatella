@@ -29,6 +29,10 @@ Also, the source code borrows implementation of `CustomPSHost` from Lee.
 
 This project inherits from above researches and great security community in order to provide close-to-be-effective Powershell environment with defenses disabled on startup.
 
+Now easily compiles with .NET 3.5, 4.0 whereas if compiled with .NET Framework 4.7.1+ an additional functionality is included that allows to unload DLLs constituting CLM bypass artefacts and attempts to delete them afterwards (hardly working to be honest).
+
+Best mileage one gets with Stracciatella compiled with .NET 3.5.
+
 ## OpSec
 
 * This program provides functionality to decode passed parameters on the fly, using Xor single-byte decode
@@ -293,14 +297,11 @@ Bye!
 Currently, the way the Stracciatella provides runspace for powershell commands is not the most stealthiest out there. We basically create a Powershell runspace, which loads up corresponding .NET Assembly. This might be considered as a flag that stracciatella's process is somewhat shady. 
 
 - **Currently not able to perform a full cleanup of CLM disabling artefacts: DLL files in-use, left in %TEMP%.**
-- **Currently only supports .NET Framework 4.5+**
 - Implement rolling XOR with 2,3 and 4 bytes long key.
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
-- ~Add Constrained Language Mode bypass~
-- ~Disable Script Block logging first, than go after AMSI~
-- ~Clean essential variables ASAP, preventing easy process memory dumping and recovery of provided scripts/commands~
 - Add Tab-autocompletion and support for Up/Down arrows (having provided that plaintext commands are not going to be stored in Straciatella's memory)
 - Add coloured outputs
+
 
 ## Credits
 
