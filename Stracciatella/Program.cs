@@ -10,7 +10,6 @@ using System.Reflection;
 using System.Threading;
 using System.Collections.Generic;
 using System.IO.Pipes;
-//using System.Numerics;
 using System.Security.Principal;
 using System.Security.AccessControl;
 
