@@ -1,4 +1,5 @@
-# Stracciatella
+# Stracciatella v0.4
+
 Powershell runspace from within C# (aka `SharpPick` technique) with AMSI and Script Block Logging disabled for your pleasure.
 
 Nowadays, when Powershell got severly instrumented by use of techniques such as:

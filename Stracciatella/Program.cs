@@ -70,7 +70,7 @@ namespace Stracciatella
             Console.WriteLine("");
             Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
             Console.WriteLine("  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>");
-            Console.WriteLine("  v0.3");
+            Console.WriteLine("  v0.4");
             Console.WriteLine("");
         }
 
