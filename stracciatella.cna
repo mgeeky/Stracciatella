@@ -96,13 +96,18 @@ sub readFile {
 sub _extractFunctions {
     local('$bid $data @cmdlets');
     $bid = $1;
-    $data = $2;
+    $data = lc($2);
 
     @cmdlets = @();
 
-    while($data hasmatch "\\s*[fF]unction ([a-zA-Z0-9-]*).*?")
+    while($data hasmatch "\\s*function ([a-z0-9-]*).*?")
     {
-        push(@cmdlets, matched()[0]);
+        push(@cmdlets, lc(matched()[0]));
+    }
+
+    while($data hasmatch "\\s*set-alias\\s+([a-z0-9-]*).*?\\s+([a-z0-9-]*).*?")
+    {
+        push(@cmdlets, lc(matched()[0]));
     }
 
     %IMPORTED_CMDLETS[$bid] = @cmdlets;
@@ -115,7 +120,7 @@ sub isAttachingImportedScriptNeeded {
     @cmdlets = @();
 
     while($args hasmatch "\\s*([a-zA-Z0-9-]+)\\s*") {
-        push(@cmdlets, matched()[0]);
+        push(@cmdlets, lc(matched()[0]));
     }
 
     for($i = 0; $i < size(@cmdlets); $i++) {
@@ -207,7 +212,7 @@ sub runStracciatella {
         btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
     }
     else {
-        btask($1, "Tasked Beacon to run Stracciatella with imported script: $args0", "T1093");
+        btask($1, "Tasked Beacon to run Stracciatella with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ ): $args0", "T1093");
     }
 
     bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
