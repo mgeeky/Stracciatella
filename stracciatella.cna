@@ -100,7 +100,7 @@ sub _extractFunctions {
 
     @cmdlets = @();
 
-    while($data hasmatch "\\s*function ([a-z0-9-]*).*?")
+    while($data hasmatch "\\s*function\\s+([a-z0-9-]*).*?")
     {
         push(@cmdlets, lc(matched()[0]));
     }
@@ -227,6 +227,7 @@ alias stracciatella-import {
         %IMPORTED_SCRIPTS[$1] = $2;
         _extractFunctions($1, $out);
         btask($1, "Stracciatella imported ( $+ $2 $+ ) having " . size(%IMPORTED_CMDLETS[$1]) . " cmdlets.");
+        println("STRACCIATELLA-DBG1: " . %IMPORTED_CMDLETS[$1]);
     }
 }
 
