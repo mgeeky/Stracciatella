@@ -227,7 +227,6 @@ alias stracciatella-import {
         %IMPORTED_SCRIPTS[$1] = $2;
         _extractFunctions($1, $out);
         btask($1, "Stracciatella imported ( $+ $2 $+ ) having " . size(%IMPORTED_CMDLETS[$1]) . " cmdlets.");
-        println("STRACCIATELLA-DBG1: " . %IMPORTED_CMDLETS[$1]);
     }
 }
 
