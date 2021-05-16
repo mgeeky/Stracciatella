@@ -48,7 +48,7 @@ Best mileage one gets with Stracciatella compiled with .NET 3.5.
 
 There are couple of options available:
 
-```
+```powershell
 PS D:\> Stracciatella -h
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
@@ -85,7 +85,7 @@ Here are couple of examples presenting use cases:
 
 1. *Pseudo-shell* - intiatiated when neither command nor script path options were given:
 
-```
+```powershell
 PS D:\> Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
@@ -116,7 +116,7 @@ SerializationVersion           1.1.0.1
 
 Firstly, in order to prepare encoded statements we can use bundled `encoder.py` script, that can be used as follows:
 
-```
+```powershell
 PS D:\> python encoder.py -h
 usage: encoder.py [options] <command|file>
 
@@ -135,7 +135,7 @@ ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJC
 
 Then we feed `encoder.py` output as input being an encoded command for Stracciatella:
 
-```
+```powershell
 PS D:\> Stracciatella.exe -v -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
@@ -244,7 +244,7 @@ Also, **we do not attempt to patch amsi.dll**, that's a bit too noisy and may be
 
 Of course, there you go:
 
-```
+```powershell
 PS D:\> "amsiInitFailed"
 At line:1 char:1
 + "amsiInitFailed"
