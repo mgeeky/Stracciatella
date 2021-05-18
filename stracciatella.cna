@@ -87,7 +87,6 @@ sub readFile {
         return $content;
     }
     catch $message { 
-        berror($1, "Could not read contents of file to upload. Error: $message");
         return "";
     }
 }
@@ -220,13 +219,18 @@ sub runStracciatella {
 }
 
 alias stracciatella-import {
-    local('$out');
+    local('$out $p');
 
-    $out = readFile($2);
+    $p = substr($0, strlen("stracciatella-import "));
+
+    $out = readFile($p);
     if(strlen($out) > 0) {
-        %IMPORTED_SCRIPTS[$1] = $2;
+        %IMPORTED_SCRIPTS[$1] = $p;
         _extractFunctions($1, $out);
-        btask($1, "Stracciatella imported ( $+ $2 $+ ) having " . size(%IMPORTED_CMDLETS[$1]) . " cmdlets.");
+        btask($1, "Stracciatella imported ( $+ $p $+ ) having " . size(%IMPORTED_CMDLETS[$1]) . " cmdlets.");
+    }
+    else {
+        berror($1, "Could not read contents of powershell script to import! Read 0 bytes.\nTry moving your script to other location (spaces in path? outside of a VM shared directory? does the file even exists?)");
     }
 }
 
