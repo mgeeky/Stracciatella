@@ -170,6 +170,7 @@ Following Cobalt Strike commands are available:
 - *`stracciatella [-v] <command>`* - executes given commands
 - *`stracciatella-remote [-v] <machine> <pipename> <command>`* - executes given commands on a remote machine on specified pipe
 - *`stracciatella-import <scriptpath>`* - imports a powershell script for use with Stracciatella
+- *`stracciatella-script <scriptpath> <command>`* - pre-loads Powershell command with a specified Powershell (ps1) script (combination of `stracciatella-import` and `stracciatella` in single operation)
 - *`stracciatella-clear`* - clears imported script on that Beacon
 - *`stracciatella-timeout <milliseconds>`* - adjusts default named pipe read timeout
 
@@ -229,6 +230,8 @@ dc1.bank.corp 10.10.10.5
 ```
 
 The associated aggressor script leverages internal Beacon routines to write to a randomly named pipe, that on the other end will be listened upon by Stracciatella's logic. Receiver end will await for inbound data for some period of time (`--timeout` parameter in Stracciatella's options, defaults to 60 seconds) and given there so no data - will time out and abort gently. Otherwise, received commands will be decoded and executed as usual.
+
+Sometimes we have Powershell scripts that do not expose any function or reflectively load .NET modules that we would like to invoke from a Powershell runtime. To facilitate that use case, the `stracciatella-script <scriptpath> <command` Beacon command can be used. It reads specified powershell script file and appends given `<command>` separated by semicolon to that script.
 
 
 ## How do you disable AMSI & Script Block logging?

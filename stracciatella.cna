@@ -38,6 +38,11 @@ beacon_command_register(
     "Use: stracciatella-import <scriptpath>\n\nDescription: Imports a powershell script and extracts its cmdlets for later use with stracciatella commands.");
 
 beacon_command_register(
+    "stracciatella-script",
+    "Preloads a specified Powershell script and launches given command with parameters.",
+    "Use: stracciatella-script <scriptpath> <command>\n\nDescription: This function at a single run preloads a specified custom\nPowershell script and adds separator (semicolon) followed by <command> to run.\nUseful when we need to provide a Powershell script that for instance reflectively loads .NET assembly (Import-Module)\nand then we need to invoke that loaded module.");
+
+beacon_command_register(
     "stracciatella-clear",
     "Clears stracciatella's imported script information.",
     "Clears stracciatella's imported script information.");
@@ -77,6 +82,15 @@ sub readFile {
     local('$path $content $f $message');
     $path = $1;
 
+    $pos1 = indexOf($path, "\"", 0);
+    $pos2 = lindexOf($path, "\"");
+    $pathlen = strlen($path);
+
+    if(($pos1 == 0) && ($pos2 == $pathlen - 1)) {
+        $path1 = substr($path, 1, $pathlen - 1);
+        $path = $path1;
+    }
+
     try {
         $f = openf($path);
         $content = readb($f, -1);
@@ -87,6 +101,7 @@ sub readFile {
         return $content;
     }
     catch $message { 
+        println("[!] Stracciatella readFile FATAL ERROR: Could not open Powershell script file: $path");
         return "";
     }
 }
@@ -180,15 +195,27 @@ sub runStracciatella {
     $machine = $3;
     $pipename = $4;
     $args = $5;
+    $customScript = $6;
     $args0 = $args;
 
-    #println("Running stracciatella with verbose = ' $+ $verbose $+ ' ; machine = ' $+ $machine $+ ' ; pipename = ' $+ $pipename $+ ' ; command = ' $+ $args $+ '");
+    #println("Running stracciatella with verbose = ' $+ $verbose $+ ' ; machine = ' $+ $machine $+ ' ; pipename = ' $+ $pipename $+ ' ; command = ' $+ $args $+ ' ; customScript = ' $+ $customScript $+ '");
 
     # generate the download cradle (if one exists) for an imported PowerShell script
     $script = "";
     $imported = 0;
+    $custom = 0;
 
-    if( ($1 in keys(%IMPORTED_SCRIPTS)) && (strlen(%IMPORTED_SCRIPTS[$1]) > 0)) {
+    if(strlen($customScript) > 0) {
+        $scriptContents = readFile($customScript);
+
+        if(strlen($scriptContents) > 0) {
+            if(right($scriptContents, 1) eq ";") { $s = " "; }
+            $args = powershell_compress($scriptContents) . $s . $args;
+            $imported = 1;
+            $custom = 1;
+        }
+    }
+    else if( ($1 in keys(%IMPORTED_SCRIPTS)) && (strlen(%IMPORTED_SCRIPTS[$1]) > 0)) {
         if(isAttachingImportedScriptNeeded($1, $args) == 1) {
             $script = %IMPORTED_SCRIPTS[$1];
             $s = "; ";
@@ -211,7 +238,12 @@ sub runStracciatella {
         btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
     }
     else {
-        btask($1, "Tasked Beacon to run Stracciatella with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ ): $args0", "T1093");
+        if ($custom == 1) {
+            btask($1, "Tasked Beacon to run Stracciatella with pre-loaded custom script ( $+ " . getFileName($customScript) . " $+ ): $args0", "T1093");
+        }
+        else {
+            btask($1, "Tasked Beacon to run Stracciatella with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ ): $args0", "T1093");
+        }
     }
 
     bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
@@ -265,7 +297,7 @@ alias stracciatella {
     }
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args);
+    runStracciatella($1, $verbose, ".", $pipename, $args, "");
 }
 
 alias stracciatella-remote {
@@ -297,7 +329,35 @@ alias stracciatella-remote {
 
     $pipename = substr($args, 0, $pos);
     $args = substr($args, $pos + 1);
-    runStracciatella($1, $verbose, $machine, $pipename, $args);
+    runStracciatella($1, $verbose, $machine, $pipename, $args, "");
+}
+
+alias stracciatella-script {
+    local('$args0 $args $verbose $pipename');
+
+    $args0 = substr($0, strlen("stracciatella-script "));
+    $args = $args0;
+
+    println("stracciatella-script $args0");
+
+    $verbose = "";
+    if ('stracciatella-script -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("stracciatella-script -v "));
+    }
+
+    $pos = indexOf($args, " ", 0);
+
+    if(($pos is $null) || ($pos + 1) > strlen($args)) {
+        berror($1, "Usage: stracciatella-script [-v] <path> <command>\n\nNo path or command specified to run stracciatella with preloaded custom script.");
+        return;
+    }
+
+    $customScript = substr($args, 0, $pos);
+    $args = substr($args, $pos + 1);
+
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript);
 }
 
 stracciatellaRestoreSettings();
