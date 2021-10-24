@@ -52,7 +52,7 @@ There are couple of options available:
 PS D:\> Stracciatella -h
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
   v0.5
 
 Usage: stracciatella.exe [options] [command]
@@ -89,7 +89,7 @@ Here are couple of examples presenting use cases:
 PS D:\> Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
   v0.5
 
 [.] Powershell's version: 5.1
@@ -139,7 +139,7 @@ Then we feed `encoder.py` output as input being an encoded command for Stracciat
 PS D:\> Stracciatella.exe -v -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
   v0.5
 
 [.] Will load script file: '.\Test2.ps1'
@@ -267,7 +267,7 @@ This script contains malicious content and has been blocked by your antivirus so
 PS D:\> .\Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz B. / mgeeky, '19-21 <mb@binary-offensive.com>
+  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
   v0.5
 
 [-] It looks like no script path was given.
