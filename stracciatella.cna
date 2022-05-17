@@ -221,10 +221,11 @@ sub executeAssembly {
 
     $bid = $1;
     $localpath = $2;
-    $args = $3;
-    $firstScriptBytes = $4;
     $msg = $5;
     $mode = $6;
+    
+    $firstScriptBytes = strrep(strrep(strrep($4, '"', ''), "\\", ''), "'", "");
+    $args = "-l \" $+ $firstScriptBytes $+ \" $3";
 
     $useBofnet = false;
 
@@ -252,14 +253,14 @@ sub executeAssembly {
         btask($bid, "Tasked beacon to run Stracciatella $msg via bofnet_jobassembly \c7" . $assemblyName . " $args \o");
         println("Stracciatella: augmented bofnet_jobassembly: bid='" . $bid . "', assemblyName='" . $assemblyName . "', args=' -l ' $+ $firstScriptBytes $+ ' " . $args . "'");
 
-        fireAlias($bid, "bofnet_jobassembly", "$assemblyName -l ' $+ $firstScriptBytes $+ ' $args");
+        fireAlias($bid, "bofnet_jobassembly", "$assemblyName $args");
     }
     else 
     {
         btask($bid, "Tasked beacon to run Stracciatella $msg $+ : \c7" . getFileName($localpath) . " $args \o");
         println("Stracciatella: augmented execute-assembly: bid='" . $bid . "', localpath='" . $localpath . "', args='-l ' $+ $firstScriptBytes $+ ' " . $args . "'");
 
-        bexecute_assembly!($bid, $localpath, " -l ' $+ $firstScriptBytes $+ ' $args");
+        bexecute_assembly!($bid, $localpath, $args);
     }
 }
 
