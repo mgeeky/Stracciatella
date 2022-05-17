@@ -1,4 +1,4 @@
-# Stracciatella v0.5
+# Stracciatella v0.6
 
 Powershell runspace from within C# (aka `SharpPick` technique) with AMSI and Script Block Logging disabled for your pleasure.
 
@@ -52,8 +52,8 @@ There are couple of options available:
 PS D:\> Stracciatella -h
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
-  v0.5
+  Mariusz Banach / mgeeky, '19-22 <mb@binary-offensive.com>
+  v0.6
 
 Usage: stracciatella.exe [options] [command]
   -s <path>, --script <path> - Path to file containing Powershell script to execute. If not options given, will enter
@@ -89,8 +89,8 @@ Here are couple of examples presenting use cases:
 PS D:\> Stracciatella.exe -v
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
-  v0.5
+  Mariusz Banach / mgeeky, '19-22 <mb@binary-offensive.com>
+  v0.6
 
 [.] Powershell's version: 5.1
 [.] Language Mode: FullLanguage
@@ -139,8 +139,8 @@ Then we feed `encoder.py` output as input being an encoded command for Stracciat
 PS D:\> Stracciatella.exe -v -x 0x31 -c "ZkNYRVQceV5CRRETeEURRl5DWkIRXVhaVBFQEVJZUENcEBMRChEVdElUUkRFWF5fcl5fRVRJRR9iVEJCWF5fYkVQRVQffVBfVkRQVlR8XlVU" .\Test2.ps1
 
   :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.
-  Mariusz Banach / mgeeky, '19-21 <mb@binary-offensive.com>
-  v0.5
+  Mariusz Banach / mgeeky, '19-22 <mb@binary-offensive.com>
+  v0.6
 
 [.] Will load script file: '.\Test2.ps1'
 [+] AMSI Disabled.
@@ -232,6 +232,24 @@ dc1.bank.corp 10.10.10.5
 The associated aggressor script leverages internal Beacon routines to write to a randomly named pipe, that on the other end will be listened upon by Stracciatella's logic. Receiver end will await for inbound data for some period of time (`--timeout` parameter in Stracciatella's options, defaults to 60 seconds) and given there so no data - will time out and abort gently. Otherwise, received commands will be decoded and executed as usual.
 
 Sometimes we have Powershell scripts that do not expose any function or reflectively load .NET modules that we would like to invoke from a Powershell runtime. To facilitate that use case, the `stracciatella-script <scriptpath> <command` Beacon command can be used. It reads specified powershell script file and appends given `<command>` separated by semicolon to that script.
+
+### BOF.NET support
+
+Stracciatella's Aggressor script (CNA) detects whether there is BOF.NET loaded and if so, exposes a command:
+
+`bofnet_loadstracciatella`
+
+That issues `bofnet_load stracciatella.exe`. Additionally, Stracciatella will then run through `bofnet_jobassembly` instead of Cobalt's builtin `execute-assembly`. 
+
+That behaviour is adjustable by changing global variable in `stracciatella.cna` script:
+
+```perl
+#
+# If there's BOF.NET loaded in Cobalt Strike, prefer `bofnet_jobassembly` command over `execute-assembly`.
+# This is useful when we want to switch our tactics to running inline/in-process via BOF.NET instead of fork & run.
+#
+$FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY = "true";
+```
 
 
 ## How do you disable AMSI & Script Block logging?
