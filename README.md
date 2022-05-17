@@ -172,6 +172,10 @@ Following Cobalt Strike commands are available:
 - *`stracciatella-script <scriptpath> <command>`* - pre-loads Powershell command with a specified Powershell (ps1) script (combination of `stracciatella-import` and `stracciatella` in single operation)
 - *`stracciatella-clear`* - clears imported script on that Beacon
 - *`stracciatella-timeout <milliseconds>`* - adjusts default named pipe read timeout
+- *`bofnet_loadstracciatella`* - loads Stracciatella.exe into BOF.NET (if one is used)
+- *`bofnet_stracciatella <command>`* - Runs Powershell commands in a safe Stracciatella runspace via BOF.NET
+- *`bofnet_stracciatella_script <scriptpath> <command>`* - Preloads a specified Powershell script and launches given command with parameters (via BOF.NET)
+
 
 One of the strategies for working with Stracciatella could be to configure a long enough pipe read timeout (1), launch it on a remote machine (2) thus having option for lateral movement over named pipe with a litle help of Stracciatella.
 
