@@ -30,9 +30,9 @@ Also, the source code borrows implementation of `CustomPSHost` from Lee.
 
 This project inherits from above researches and great security community in order to provide close-to-be-effective Powershell environment with defenses disabled on startup.
 
-Now easily compiles with .NET 3.5, 4.0 whereas if compiled with .NET Framework 4.7.1+ an additional functionality is included that allows to unload DLLs constituting CLM bypass artefacts and attempts to delete them afterwards (hardly working to be honest).
+Now easily compiles with .NET 4.0 whereas if compiled with .NET Framework 4.7.1+ an additional functionality is included that allows to unload DLLs constituting CLM bypass artefacts and attempts to delete them afterwards (hardly working to be honest).
 
-Best mileage one gets with Stracciatella compiled with .NET 3.5.
+Best mileage one gets with Stracciatella compiled with .NET 4.0.
 
 ## OpSec
 
@@ -41,7 +41,6 @@ Best mileage one gets with Stracciatella compiled with .NET 3.5.
 * Before launching any command, it makes sure to disable Script Block logging using two approaches
 * This program does not patch any system library, system native code (think amsi.dll)
 * Efforts were made to not store decoded script/commands excessively long, in order to protect itself from memory-dumping techniques governed by EDRs and AVs
-* The resulting binary may be considered bit too large, that's because `Costura.Fody` NuGet package is used which bundles `System.Management.Automation.dll` within resulting assembly
 
 
 ## Usage
