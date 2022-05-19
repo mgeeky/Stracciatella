@@ -59,8 +59,13 @@ beacon_command_register(
 
 beacon_command_register(
     "bofnet_stracciatella",
-    "Runs Powershell commands in a safe Stracciatella runspace via BOF.NET.",
+    "(non-blocking) Runs Powershell commands in a safe Stracciatella runspace via BOF.NET bofnet_jobassembly",
     "Use: bofnet_stracciatella [-v] <command>\n\nDescription: Runs Stracciatella via bofnet_jobassembly (if one is used).\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
+
+beacon_command_register(
+    "bofnet_executestracciatella",
+    "(blocking) Runs Powershell commands in a safe Stracciatella runspace via BOF.NET bofnet_executeassembly",
+    "Use: bofnet_stracciatella [-v] <command>\n\nDescription: Runs Stracciatella via bofnet_executeassembly (if one is used).\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
 
 beacon_command_register(
     "bofnet_stracciatella_script",
@@ -217,14 +222,15 @@ sub stracciatellaRestoreSettings {
 }
 
 sub executeAssembly {
-    local('$bid $localpath $args $assemblyName $pos $firstScriptBytes $msg');
+    local('$bid $localpath $args $assemblyName $pos $firstScriptBytes $msg $job $mode');
 
     $bid = $1;
     $localpath = $2;
     $msg = $5;
     $mode = $6;
+    $job = $7;
     
-    $firstScriptBytes = strrep(strrep(strrep($4, '"', ''), "\\", ''), "'", "");
+    $firstScriptBytes = strrep(strrep($4, '"', ''), "'", "");
     $args = "-l \" $+ $firstScriptBytes $+ \" $3";
 
     $useBofnet = false;
@@ -250,10 +256,20 @@ sub executeAssembly {
 
         $assemblyName = lc($assemblyName);
 
-        btask($bid, "Tasked beacon to run Stracciatella $msg via bofnet_jobassembly \c7" . $assemblyName . " $args \o");
-        println("Stracciatella: augmented bofnet_jobassembly: bid='" . $bid . "', assemblyName='" . $assemblyName . "', args=' -l ' $+ $firstScriptBytes $+ ' " . $args . "'");
+        if($job)
+        {
+            btask($bid, "Tasked beacon to run Stracciatella $msg via bofnet_jobassembly \c7" . $assemblyName . " $args \o");
+            println("Stracciatella: augmented bofnet_jobassembly: bid='" . $bid . "', assemblyName='" . $assemblyName . "', args=' -l ' $+ $firstScriptBytes $+ ' " . $args . "'");
 
-        fireAlias($bid, "bofnet_jobassembly", "$assemblyName $args");
+            fireAlias($bid, "bofnet_jobassembly", "$assemblyName $args");
+        }
+        else
+        {
+            btask($bid, "Tasked beacon to run Stracciatella $msg via bofnet_executeassembly \c7" . $assemblyName . " $args \o");
+            println("Stracciatella: augmented bofnet_executeassembly: bid='" . $bid . "', assemblyName='" . $assemblyName . "', args=' -l ' $+ $firstScriptBytes $+ ' " . $args . "'");
+
+            fireAlias($bid, "bofnet_executeassembly", "$assemblyName $args");
+        }
     }
     else 
     {
@@ -265,7 +281,7 @@ sub executeAssembly {
 }
 
 sub runStracciatella {
-    local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename $mode');
+    local('$bid $args $args0 $s $imported $cradle $scriptContents $opts $key $enc $verbose $pipename $mode $job');
     $bid = $1;
     $verbose = $2;
     $machine = $3;
@@ -273,6 +289,7 @@ sub runStracciatella {
     $args = $5;
     $customScript = $6;
     $mode = $7;
+    $job = $8;
 
     $args0 = $args;
 
@@ -342,7 +359,7 @@ sub runStracciatella {
     }
 
     if($machine eq ".") {
-        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg, $mode);
+        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg, $mode, $job);
     }
 
     if(strlen($enc) >= 20000) {
@@ -406,7 +423,7 @@ alias stracciatella {
     }
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, "", false);
+    runStracciatella($1, $verbose, ".", $pipename, $args, "", false, false);
 }
 
 alias bofnet_stracciatella {
@@ -427,7 +444,28 @@ alias bofnet_stracciatella {
     }
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, "", true);
+    runStracciatella($1, $verbose, ".", $pipename, $args, "", true, true);
+}
+
+alias bofnet_executestracciatella {
+    local('$args0 $args $verbose $pipename');
+
+    if($has_bofnet_commands == false) {
+        berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+        return;
+    }
+
+    $args0 = substr($0, strlen("bofnet_executestracciatella "));
+    $args = $args0;
+
+    $verbose = "";
+    if ('bofnet_executestracciatella -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("bofnet_executestracciatella -v "));
+    }
+
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args, "", true, false);
 }
 
 alias stracciatella-remote {
@@ -460,7 +498,7 @@ alias stracciatella-remote {
     $pipename = substr($args, 0, $pos);
     $args = substr($args, $pos + 1);
 
-    runStracciatella($1, $verbose, $machine, $pipename, $args, "", false);
+    runStracciatella($1, $verbose, $machine, $pipename, $args, "", false, false);
 }
 
 alias stracciatella-script {
@@ -488,7 +526,7 @@ alias stracciatella-script {
     $args = substr($args, $pos + 1);
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, false);
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, false, false);
 }
 
 alias bofnet_stracciatella_script {
@@ -521,7 +559,7 @@ alias bofnet_stracciatella_script {
     $args = substr($args, $pos + 1);
 
     $pipename = [java.util.UUID randomUUID];
-    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, true);
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, true, false);
 }
 
 checkBofnet();
