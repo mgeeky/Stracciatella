@@ -74,14 +74,28 @@ beacon_command_register(
 
 
 $has_bofnet_commands = false;
+$checkBofNetTimes = 3;
+$checkedBofNetSoFar = 0;
 
 sub checkBofnet {
+    if($has_bofnet_commands == true) {
+        return;
+    }
+
     if($has_bofnet_commands == false) {
         foreach $command (beacon_commands()) {
             if('bofnet_init' iswm $command) {
                 $has_bofnet_commands = true;
                 break;
             }
+        }
+    }
+
+    if((%options["prefer_bofnet_over_executeasm"] eq "true") && ($has_bofnet_commands == false)) {
+        $checkedBofNetSoFar += 1;
+
+        if($checkedBofNetSoFar > $checkBofNetTimes) {
+            show_error("There is no BOF.NET loaded in Cobalt Strike! Load bofnet.cna or reload stracciatella.cna to use protected-execute-assembly");
         }
     }
 }
@@ -240,8 +254,11 @@ sub executeAssembly {
             $useBofnet = true;
         }
         else {
-            berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
-            return;
+            checkBofnet();
+            if($has_bofnet_commands == false) {
+                berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+                return;
+            }
         }
     }
 
