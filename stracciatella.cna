@@ -271,7 +271,8 @@ sub executeAssembly {
             $assemblyName = substr($assemblyName, 0, $pos);
         }
 
-        $assemblyName = lc($assemblyName);
+        #Temporary comment-out the lower-case assemblyName due problems with BOF.NET
+        #$assemblyName = lc($assemblyName);
 
         if($job)
         {
