@@ -180,8 +180,9 @@ Following Cobalt Strike commands are available:
 | `stracciatella-timeout <milliseconds>`                     | adjusts default named pipe read timeout                                                                                                               |
 | `bofnet_loadstracciatella`                                 | loads Stracciatella.exe into BOF.NET (if one is used)                                                                                                 |
 | `bofnet_stracciatella <command>`                           | (non-blocking) Runs Powershell commands in a safe Stracciatella runspace via BOF.NET `bofnet_jobassembly`                                             |
+| `bofnet_stracciatella_script <scriptpath> <command>`       | (non-blocking) Preloads a specified Powershell script and launches given command with parameters via BOF.NET `bofnet_jobassembly`                     |
 | `bofnet_executestracciatella <command>`                    | (blocking) Runs Powershell commands in a safe Stracciatella runspace via BOF.NET `bofnet_executeassembly`                                             |
-| `bofnet_stracciatella_script <scriptpath> <command>`       | Preloads a specified Powershell script and launches given command with parameters (via BOF.NET)                                                       |
+| `bofnet_executestracciatella_script <scriptpath> <command>`| (blocking) Preloads a specified Powershell script and launches given command with parameters via BOF.NET `bofnet_executeassembly`                     |
 
 
 One of the strategies for working with Stracciatella could be to configure a long enough pipe read timeout (1), launch it on a remote machine (2) thus having option for lateral movement over named pipe with a litle help of Stracciatella.
